@@ -1,0 +1,9 @@
+BEGIN_PROLOG
+
+standard_noe:
+{
+ module_type:      noe
+ RemoveBadChans:   true   #take out bad channels?
+}
+
+END_PROLOG

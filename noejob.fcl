@@ -1,0 +1,29 @@
+#include "noe.fcl"
+#include "services.fcl"
+#include "IFDBSpillInfo.fcl"
+
+process_name: noeFTW
+
+services:
+{
+  TFileService: { fileName: "histos.root" }
+  message:      @local::standard_out
+  @table::standard_services
+}
+
+source:
+{
+  module_type: RootInput
+  maxEvents: -1
+}
+
+physics:
+{
+  producers:
+  {
+    noe: @local::standard_noe
+  }
+
+  reco: [ noe ]
+}
+
