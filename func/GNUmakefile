@@ -7,7 +7,7 @@ BINLIBS = -l$(PACKAGE) $(ROOTLIBS) $(ROOTGLIBS)
 
 override CPPFLAGS :=  `pkg-config --cflags gtk+-2.0`
 
-LOADLIBES += -lgtk-x11-2.0 -lcairo
+override LIBLIBS += -lgtk-x11-2.0 -lcairo
 
 ########################################################################
 include SoftRelTools/standard.mk

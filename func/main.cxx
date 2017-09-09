@@ -27,24 +27,31 @@ static nevent THEevent;
 
 gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
 {
-  printf("I'm going to draw an event\n");
-
   nevent * MYevent = (nevent *)data;
 
   cairo_t * cr = gdk_cairo_create(widg->window);
+  cairo_set_source_rgb(cr, 0, 0, 0);
+  cairo_paint(cr);
+
   cairo_set_line_width(cr, 1);
 
+  printf("I'm going to draw an event of %u hits\n", (unsigned int)MYevent->hits.size());
+
   for(unsigned int i = 0; i < MYevent->hits.size(); i++){
-    int x = MYevent->hits[i].plane, y = MYevent->hits[i].cell;
+    int x = MYevent->hits[i].plane,
+        y = MYevent->hits[i].cell;
 
-    cairo_set_source_rgb(cr, 1, 1, 1);
+    if(x%2 == 1) y += 400;
 
-    cairo_move_to(cr, x, y);
+    y = 12*32 + 400 - y;
+
+    cairo_set_source_rgb(cr, 0, 1, 1);
+
+    cairo_move_to(cr, x  , y);
     cairo_line_to(cr, x+1, y);
     cairo_stroke(cr);
   }
 
-  cairo_paint(cr);
   cairo_destroy(cr);
  
   return FALSE;
