@@ -56,10 +56,10 @@ void noe::produce(art::Event& evt)
     first = false;
   }   
 
-  fprintf(TEMP, "%u\n", cellhits->size());
+  fprintf(TEMP, "%u\n", (unsigned int)cellhits->size());
   for(unsigned int i = 0; i < cellhits->size(); i++){
     const rb::CellHit & c = (*cellhits)[i];
-    fprintf(TEMP, "%d %d\n", c.Plane(), c.Cell());
+    fprintf(TEMP, "%d %d %d %d\n", c.Plane(), c.Cell(), c.ADC(), c.TDC());
   }   
 }
 

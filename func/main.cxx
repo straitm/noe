@@ -3,7 +3,7 @@
 #include <vector>
 
 struct hit{
-  int cell, plane;
+  int32_t cell, plane, adc, tdc;
 };
 
 struct nevent{
@@ -25,6 +25,24 @@ struct tonext {
 
 static nevent THEevent;
 
+void colorhit(const int32_t adc, float & red, float & green, float & blue)
+{
+  // Oh so hacky!
+  if(adc < 40) red = green = blue = 0.3 + 0.01*adc;
+  else if(adc < 120) blue  = 0.7 + 0.3*(adc-40)/80.0, 
+                     red   = 0.7 - 0.7*(adc-40)/80.0, 
+                     green = 0.7 - 0.7*(adc-40)/80.0;
+  else if(adc < 600) blue  = 1, red = green = 0;
+  else if(adc < 800) blue = 1-(adc-600)/200.0, 
+                     green  = (adc-600)/200.0, 
+                     red = 0;
+  else if(adc < 1200) green = 1, red = blue  = 0;
+  else if(adc < 1400) green = 1-(adc-1200)/200.0,
+                      red   =   (adc-1200)/200.0,
+                      blue = 0;
+  else red = 1, green = blue  = 0;
+}
+
 gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
 {
   nevent * MYevent = (nevent *)data;
@@ -33,22 +51,34 @@ gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
   cairo_set_source_rgb(cr, 0, 0, 0);
   cairo_paint(cr);
 
-  cairo_set_line_width(cr, 1);
+  cairo_set_line_width(cr, 1.0);
 
   printf("I'm going to draw an event of %u hits\n", (unsigned int)MYevent->hits.size());
 
   for(unsigned int i = 0; i < MYevent->hits.size(); i++){
-    int x = MYevent->hits[i].plane,
-        y = MYevent->hits[i].cell;
+    hit & thishit = MYevent->hits[i];
+    int x = thishit.plane, y = thishit.cell;
 
-    if(x%2 == 1) y += 400;
+    if(x%2 == 1) y += 400; // put y view on the bottom
 
-    y = 12*32 + 400 - y;
+    y = 12*32 + 400 - y; // Flip into familiar orientation
 
-    cairo_set_source_rgb(cr, 0, 1, 1);
+    // Want the nearest small integer box that has an aspect ratio
+    // close to 3.36:1.  The options would seem to be 3:1 or 7:2.
+    // 7:2 makes the detector 3136 pixels wide, which is a bit much, so
+    // 3:1 it is, I guess
 
-    cairo_move_to(cr, x  , y);
-    cairo_line_to(cr, x+1, y);
+    x /= 2; // dispense with wrong-parity planes
+    x *= 3; // stretch to desired dimensions
+
+    float red, green, blue;
+
+    colorhit(thishit.adc, red, green, blue);
+
+    cairo_set_source_rgb(cr, red, green, blue);
+
+    cairo_move_to(cr, x  , y+0.5);
+    cairo_line_to(cr, x+3, y+0.5);
     cairo_stroke(cr);
   }
 
@@ -67,7 +97,11 @@ void get_event(nevent & event)
   fscanf(TEMP, "%d", &nhit);
   event.hits.resize(nhit);
   for(int i = 0; i < nhit; i++)
-    fscanf(TEMP, "%d %d", &event.hits[i].plane, &event.hits[i].cell);
+    fscanf(TEMP, "%d %d %d %d",
+           &event.hits[i].plane,
+           &event.hits[i].cell,
+           &event.hits[i].adc,
+           &event.hits[i].tdc);
 }
 
 /** Display the next or previous event that satisfies the condition
@@ -102,7 +136,6 @@ bool just_go(__attribute__((unused)) const nevent & event)
   return true;
 } 
 
-
 void realmain()
 {
   TEMP = fopen("temp", "r");
@@ -118,12 +151,12 @@ void realmain()
 
   butpair npbuts = mkbutton((char *)"Event", &just_go);
 
-  const int nrow = 3, ncol = 1;
+  const int nrow = 7, ncol = 1;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
   gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.next, 0, 1, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.prev, 0, 1, 1, 2);
-  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, 1, 2, 3); 
+  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, 1, 2, 7); 
   gtk_widget_show_all(win);
   gtk_main();
 }
