@@ -2,17 +2,11 @@
 #include <stdio.h>
 #include <vector>
 #include <algorithm>
-
-struct hit{
-  int32_t cell, plane, adc, tdc;
-};
-
-struct nevent{
-  std::vector<hit> hits;
-};
+#include "event.h"
 
 GtkWidget * edarea = NULL;
-static FILE * TEMP = NULL;
+
+extern std::vector<nevent> theevents;
 
 struct tonext {
   bool(*func)(const nevent &); // is event is interesting?
@@ -47,10 +41,37 @@ void colorhit(const int32_t adc, float & red, float & green, float & blue)
   else red = 1, green = blue  = 0;
 }
 
+static bool by_charge(const hit & a, const hit & b)
+{
+  return a.adc < b.adc;
+}
+
 static bool by_time(const hit & a, const hit & b)
 {
   return a.tdc < b.tdc;
 }
+
+const int viewsep = 8; // pixels between x and y views
+
+static void draw_background(GtkWidget * widget)
+{
+  cairo_t * cr = gdk_cairo_create(widget->window);
+
+  cairo_set_source_rgb(cr, 0, 0, 0);
+  cairo_paint(cr);
+
+  cairo_set_source_rgb(cr, 1, 0, 1);
+  cairo_set_line_width(cr, 1.0);
+
+  cairo_rectangle(cr, 0.5, 0.5,                   16*28*3+1, 12*32+1);
+  cairo_stroke(cr);
+
+  cairo_rectangle(cr, 0.5, 0.5 + 12*32 + viewsep, 16*28*3+1, 12*32+1);
+  cairo_stroke(cr);
+
+  cairo_destroy(cr);
+} 
+
 
 gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
 {
@@ -62,29 +83,23 @@ gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
   cairo_t * cr = gdk_cairo_create(widg->window);
   cairo_push_group(cr);
 
-  cairo_set_source_rgb(cr, 0, 0, 0);
-  cairo_paint(cr);
+  draw_background(widg);
 
   cairo_set_line_width(cr, 1.0);
 
   printf("I'm going to draw an event of %u hits\n", (unsigned int)MYevent->hits.size());
-  std::sort(MYevent->hits.begin(), MYevent->hits.end(), by_time);
+  std::sort(MYevent->hits.begin(), MYevent->hits.end(), by_charge);
 
   for(unsigned int i = 0; i < MYevent->hits.size(); i++){
     hit & thishit = MYevent->hits[i];
-    int x = thishit.plane, y = thishit.cell;
-
-    if(x%2 == 1) y += 400; // put y view on the bottom
-
-    y = 12*32 + 400 - y; // Flip into familiar orientation
 
     // Want the nearest small integer box that has an aspect ratio
     // close to 3.36:1.  The options would seem to be 3:1 or 7:2.
     // 7:2 makes the detector 3136 pixels wide, which is a bit much, so
     // 3:1 it is, I guess
-
-    x /= 2; // dispense with wrong-parity planes
-    x *= 3; // stretch to desired dimensions
+    const int x = 3*(thishit.plane/2) + 1,
+      // put y view on the bottom
+      y = 12*32*2 + viewsep - thishit.cell - (thishit.plane%2)*(12*32 + viewsep);
 
     float red, green, blue;
 
@@ -108,17 +123,13 @@ struct butpair{
   GtkWidget * next, * prev;
 };
 
-void get_event(nevent & event)
+void get_event(nevent & event, const int change)
 {
-  int nhit = 0;
-  fscanf(TEMP, "%d", &nhit);
-  event.hits.resize(nhit);
-  for(int i = 0; i < nhit; i++)
-    fscanf(TEMP, "%d %d %d %d",
-           &event.hits[i].plane,
-           &event.hits[i].cell,
-           &event.hits[i].adc,
-           &event.hits[i].tdc);
+  static int evi = 0;
+  evi += change;
+  if(evi >= (int)theevents.size()) evi = theevents.size() - 1;
+  if(evi <          0            ) evi = 0;
+  event = theevents[evi];
 }
 
 /** Display the next or previous event that satisfies the condition
@@ -126,10 +137,12 @@ given in the test function passed in. */
 static void to_next(__attribute__((unused)) GtkWidget * widget, 
                     gpointer data)
 {
-  get_event(THEevent);
+  tonext * directions = (tonext *)data;
+  if(directions->forward) get_event(THEevent, 1);
+  else                    get_event(THEevent, -1);
+
   draw_event(edarea, 0, &THEevent);
 }
-
 
 static butpair mkbutton(char * label, bool(*func)(const nevent &))
 {
@@ -155,15 +168,13 @@ bool just_go(__attribute__((unused)) const nevent & event)
 
 void realmain()
 {
-  TEMP = fopen("temp", "r");
-
   gtk_init(0, 0); 
   GtkWidget * win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(win),
                        "NOE: New nOva Event viewer");
 
   edarea = gtk_drawing_area_new();
-  gtk_widget_set_size_request(edarea, 28*16*3, 384 + 400);
+  gtk_widget_set_size_request(edarea, 28*16*3 + 2, 12*32*2 + viewsep + 2);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),&THEevent);
 
   butpair npbuts = mkbutton((char *)"Event", &just_go);

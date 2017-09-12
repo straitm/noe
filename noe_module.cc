@@ -1,4 +1,4 @@
-#include "func/main.h"
+#include <vector>
 
 #include "art/Framework/Core/EDProducer.h"
 
@@ -12,9 +12,12 @@
 #include "RecoBase/RecoHit.h"
 #include "RecoBase/Track.h"
 
+#include "func/main.h"
+#include "func/event.h"
+
 #include <signal.h>
 
-static FILE * TEMP = NULL;
+std::vector<nevent> theevents;
 
 namespace noe {
 class noe : public art::EDProducer {
@@ -31,7 +34,6 @@ noe::noe(fhicl::ParameterSet const & pset): EDProducer()
 
 void noe::endJob()
 {
-  fclose(TEMP);
   realmain();
 }
 
@@ -50,17 +52,17 @@ void noe::produce(art::Event& evt)
 
   printf("Event %lu\n", cellhits->size());
 
-  static bool first = true;
-  if(first){
-    TEMP = fopen("temp", "w");
-    first = false;
-  }   
-
-  fprintf(TEMP, "%u\n", (unsigned int)cellhits->size());
+  nevent ev;
   for(unsigned int i = 0; i < cellhits->size(); i++){
     const rb::CellHit & c = (*cellhits)[i];
-    fprintf(TEMP, "%d %d %d %d\n", c.Plane(), c.Cell(), c.ADC(), c.TDC());
+    hit thehit;
+    thehit.cell = c.Cell();
+    thehit.plane = c.Plane();
+    thehit.adc = c.ADC();
+    thehit.tdc = c.TDC();
+    ev.hits.push_back(thehit);
   }   
+  theevents.push_back(ev);
 }
 
 DEFINE_ART_MODULE(noe);
