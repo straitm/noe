@@ -10,7 +10,7 @@ extern std::vector<nevent> theevents;
 
 struct tonext {
   bool(*func)(const nevent &); // is event is interesting?
-  bool forward;  // True if we are seeking forward in the file 
+  bool forward;  // True if we are seeking forward in the file
   tonext(bool(*func_in)(const nevent &), const bool forward_in)
   {
     func = func_in;
@@ -27,12 +27,12 @@ void colorhit(const int32_t adc, float & red, float & green, float & blue)
   const float nextcut = 120;
   if(adc < graycut) red = green = blue = 0.2;
   else if(adc < nextcut)
-    blue  = 0.9 + 0.3*(adc-graycut)/(nextcut-graycut), 
-    red   = 0.9 - 0.7*(adc-graycut)/(nextcut-graycut), 
+    blue  = 0.9 + 0.3*(adc-graycut)/(nextcut-graycut),
+    red   = 0.9 - 0.7*(adc-graycut)/(nextcut-graycut),
     green = 0.9 - 0.7*(adc-graycut)/(nextcut-graycut);
   else if(adc < 600) blue  = 1, red = green = 0;
-  else if(adc < 800) blue = 1-(adc-600)/200.0, 
-                     green  = (adc-600)/200.0, 
+  else if(adc < 800) blue = 1-(adc-600)/200.0,
+                     green  = (adc-600)/200.0,
                      red = 0;
   else if(adc < 1200) green = 1, red = blue  = 0;
   else if(adc < 1400) green = 1-(adc-1200)/200.0,
@@ -41,22 +41,20 @@ void colorhit(const int32_t adc, float & red, float & green, float & blue)
   else red = 1, green = blue  = 0;
 }
 
-static bool by_charge(const hit & a, const hit & b)
+__attribute__((unused)) static bool by_charge(const hit & a, const hit & b)
 {
   return a.adc < b.adc;
 }
 
-static bool by_time(const hit & a, const hit & b)
+__attribute__((unused)) static bool by_time(const hit & a, const hit & b)
 {
   return a.tdc < b.tdc;
 }
 
 const int viewsep = 8; // pixels between x and y views
 
-static void draw_background(GtkWidget * widget)
+static void draw_background(GtkWidget * widget, cairo_t * cr)
 {
-  cairo_t * cr = gdk_cairo_create(widget->window);
-
   cairo_set_source_rgb(cr, 0, 0, 0);
   cairo_paint(cr);
 
@@ -68,10 +66,7 @@ static void draw_background(GtkWidget * widget)
 
   cairo_rectangle(cr, 0.5, 0.5 + 12*32 + viewsep, 16*28*3+1, 12*32+1);
   cairo_stroke(cr);
-
-  cairo_destroy(cr);
-} 
-
+}
 
 gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
 {
@@ -83,7 +78,7 @@ gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
   cairo_t * cr = gdk_cairo_create(widg->window);
   cairo_push_group(cr);
 
-  draw_background(widg);
+  draw_background(widg, cr);
 
   cairo_set_line_width(cr, 1.0);
 
@@ -115,7 +110,7 @@ gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
   cairo_pop_group_to_source(cr);
   cairo_paint(cr);
   cairo_destroy(cr);
- 
+
   return FALSE;
 }
 
@@ -134,7 +129,7 @@ void get_event(nevent & event, const int change)
 
 /** Display the next or previous event that satisfies the condition
 given in the test function passed in. */
-static void to_next(__attribute__((unused)) GtkWidget * widget, 
+static void to_next(__attribute__((unused)) GtkWidget * widget,
                     gpointer data)
 {
   tonext * directions = (tonext *)data;
@@ -162,13 +157,13 @@ static butpair mkbutton(char * label, bool(*func)(const nevent &))
 }
 
 bool just_go(__attribute__((unused)) const nevent & event)
-{ 
+{
   return true;
-} 
+}
 
 void realmain()
 {
-  gtk_init(0, 0); 
+  gtk_init(0, 0);
   GtkWidget * win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(win),
                        "NOE: New nOva Event viewer");
@@ -179,12 +174,12 @@ void realmain()
 
   butpair npbuts = mkbutton((char *)"Event", &just_go);
 
-  const int nrow = 7, ncol = 1;
+  const int nrow = 7, ncol = 4;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
   gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.next, 0, 1, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.prev, 0, 1, 1, 2);
-  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, 1, 2, 7); 
+  gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.prev, 1, 2, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 1, nrow);
   gtk_widget_show_all(win);
   gtk_main();
 }

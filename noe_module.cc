@@ -61,7 +61,7 @@ void noe::produce(art::Event& evt)
     thehit.adc = c.ADC();
     thehit.tdc = c.TDC();
     ev.hits.push_back(thehit);
-  }   
+  }
   theevents.push_back(ev);
 }
 
