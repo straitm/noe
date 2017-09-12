@@ -1,6 +1,7 @@
 #include <gtk/gtk.h>
 #include <stdio.h>
 #include <vector>
+#include <algorithm>
 
 struct hit{
   int32_t cell, plane, adc, tdc;
@@ -28,10 +29,13 @@ static nevent THEevent;
 void colorhit(const int32_t adc, float & red, float & green, float & blue)
 {
   // Oh so hacky!
-  if(adc < 40) red = green = blue = 0.3 + 0.01*adc;
-  else if(adc < 120) blue  = 0.7 + 0.3*(adc-40)/80.0, 
-                     red   = 0.7 - 0.7*(adc-40)/80.0, 
-                     green = 0.7 - 0.7*(adc-40)/80.0;
+  const float graycut = 60;
+  const float nextcut = 120;
+  if(adc < graycut) red = green = blue = 0.2;
+  else if(adc < nextcut)
+    blue  = 0.9 + 0.3*(adc-graycut)/(nextcut-graycut), 
+    red   = 0.9 - 0.7*(adc-graycut)/(nextcut-graycut), 
+    green = 0.9 - 0.7*(adc-graycut)/(nextcut-graycut);
   else if(adc < 600) blue  = 1, red = green = 0;
   else if(adc < 800) blue = 1-(adc-600)/200.0, 
                      green  = (adc-600)/200.0, 
@@ -43,17 +47,28 @@ void colorhit(const int32_t adc, float & red, float & green, float & blue)
   else red = 1, green = blue  = 0;
 }
 
+static bool by_time(const hit & a, const hit & b)
+{
+  return a.tdc < b.tdc;
+}
+
 gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
 {
   nevent * MYevent = (nevent *)data;
 
+  // Animate only if drawing for the first time, not if exposed.
+  // bool animate = !ee;
+
   cairo_t * cr = gdk_cairo_create(widg->window);
+  cairo_push_group(cr);
+
   cairo_set_source_rgb(cr, 0, 0, 0);
   cairo_paint(cr);
 
   cairo_set_line_width(cr, 1.0);
 
   printf("I'm going to draw an event of %u hits\n", (unsigned int)MYevent->hits.size());
+  std::sort(MYevent->hits.begin(), MYevent->hits.end(), by_time);
 
   for(unsigned int i = 0; i < MYevent->hits.size(); i++){
     hit & thishit = MYevent->hits[i];
@@ -82,6 +97,8 @@ gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
     cairo_stroke(cr);
   }
 
+  cairo_pop_group_to_source(cr);
+  cairo_paint(cr);
   cairo_destroy(cr);
  
   return FALSE;
@@ -146,7 +163,7 @@ void realmain()
                        "NOE: New nOva Event viewer");
 
   edarea = gtk_drawing_area_new();
-  gtk_widget_set_size_request(edarea, 896, int(384 * 2.1));
+  gtk_widget_set_size_request(edarea, 28*16*3, 384 + 400);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),&THEevent);
 
   butpair npbuts = mkbutton((char *)"Event", &just_go);
