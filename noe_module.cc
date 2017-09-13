@@ -53,6 +53,9 @@ void noe::produce(art::Event& evt)
   printf("Event %lu\n", cellhits->size());
 
   nevent ev;
+  ev.nevent = evt.event();
+  ev.nrun = evt.run();
+  ev.nsubrun = evt.subRun();
   for(unsigned int i = 0; i < cellhits->size(); i++){
     const rb::CellHit & c = (*cellhits)[i];
     hit thehit;
@@ -60,7 +63,7 @@ void noe::produce(art::Event& evt)
     thehit.plane = c.Plane();
     thehit.adc = c.ADC();
     thehit.tdc = c.TDC();
-    ev.hits.push_back(thehit);
+    ev.addhit(thehit);
   }
   theevents.push_back(ev);
 }
