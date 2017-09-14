@@ -24,6 +24,7 @@ static bool ghave_read_all = false;
 static bool need_another_event = false;
 static bool prefetching = false;
 static bool cancel_draw = false;
+static bool animating = false;
 extern std::vector<nevent> theevents;
 
 static int gevi = 0;
@@ -181,18 +182,21 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
     if(animate && ti != THEevent->maxtick){
       usleep(15e3);
+      animating = true;
 
       // Check if we have started drawing another event while
       // still in here.  If so, don't keep drawing this one.
       const int thisdrawn = drawn;
       while(g_main_context_iteration(NULL, FALSE));
-      if(!can_animate && cancel_draw) break;
+      if(cancel_draw) break;
       if(drawn != thisdrawn){
         printf("Cancelling draw %d, since another one has started\n", thisdrawn);
         break;
       }
     }
   }
+  cancel_draw = true;
+  animating = false;
 
   printf("Done drawing\n");
 
@@ -245,12 +249,9 @@ fetch_an_event(__attribute__((unused)) gpointer data)
 {
   if(ghave_read_all) return FALSE; // don't call this again
 
-  if(gtk_events_pending()){
-    printf("fetch_an_event(): something is going on, never mind\n");
+  if(animating || gtk_events_pending()){
     return TRUE;
   }
-
-  printf("Getting another event while nothing else is going on\n");
 
   // exit GTK event loop to get another event from art
   prefetching = true;
@@ -352,7 +353,7 @@ static void setup()
   get_event(0);
   draw_event(edarea, NULL, NULL);
 
-  g_timeout_add(50 /* ms */, fetch_an_event, NULL);
+  g_timeout_add(5 /* ms */, fetch_an_event, NULL);
 }
 
 void realmain(const bool have_read_all)
