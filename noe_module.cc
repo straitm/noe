@@ -34,7 +34,7 @@ noe::noe(fhicl::ParameterSet const & pset): EDProducer()
 
 void noe::endJob()
 {
-  realmain();
+  realmain(true);
 }
 
 noe::~noe() { }
@@ -50,8 +50,6 @@ void noe::produce(art::Event& evt)
 
   evt.getByLabel("calhit", cellhits);
 
-  printf("Event %lu\n", cellhits->size());
-
   nevent ev;
   ev.nevent = evt.event();
   ev.nrun = evt.run();
@@ -66,6 +64,7 @@ void noe::produce(art::Event& evt)
     ev.addhit(thehit);
   }
   theevents.push_back(ev);
+  realmain(false);
 }
 
 DEFINE_ART_MODULE(noe);

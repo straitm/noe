@@ -5,7 +5,7 @@ LIBCXXFILES := $(wildcard *.cxx)
 
 BINLIBS = -l$(PACKAGE) $(ROOTLIBS) $(ROOTGLIBS)
 
-override CPPFLAGS :=  `pkg-config --cflags gtk+-2.0`
+override CPPFLAGS := -Wall -Wextra `pkg-config --cflags gtk+-2.0`
 
 override LIBLIBS += -lgtk-x11-2.0 -lcairo
 

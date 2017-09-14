@@ -20,11 +20,15 @@ GtkWidget * edarea = NULL;
 static GtkWidget * statbox[3];
 static GtkTextBuffer * stattext[3];
 
+static bool ghave_read_all = false;
+static bool need_another_event = false;
+static bool prefetching = false;
+static bool cancel_draw = false;
 extern std::vector<nevent> theevents;
 
-static nevent THEevent;
+static int gevi = 0;
 
-static bool can_animate = false; // TODO: set to a ticky box
+static bool can_animate = false;
 static bool cumulative_animation = false;
 
 /* Update the given status bar to the given text and also process all
@@ -42,7 +46,7 @@ static void set_status(const int boxn, const char * format, ...)
   while(g_main_context_iteration(NULL, FALSE));
 }
 
-void colorhit(const int32_t adc, float & red, float & green, float & blue)
+static void colorhit(const int32_t adc, float & red, float & green, float & blue)
 {
   // Oh so hacky!
   const float graycut = 60;
@@ -90,18 +94,19 @@ static void draw_background(cairo_t * cr)
   cairo_stroke(cr);
 }
 
-static void draw_hits(cairo_t * cr, nevent * MYevent, const int maxtick)
+static void draw_hits(cairo_t * cr, const int maxtick)
 {
   cairo_set_line_width(cr, 1.0);
 
-  std::sort(MYevent->hits.begin(), MYevent->hits.end(), by_charge);
+  nevent * THEevent = &theevents[gevi];
 
-  for(unsigned int i = 0; i < MYevent->hits.size(); i++){
-    hit & thishit = MYevent->hits[i];
+  std::sort(THEevent->hits.begin(), THEevent->hits.end(), by_charge);
 
+  for(unsigned int i = 0; i < THEevent->hits.size(); i++){
+    hit & thishit = THEevent->hits[i];
     if(can_animate){
-      if( cumulative_animation && MYevent->hits[i].tdc >  maxtick) continue;
-      if(!cumulative_animation && abs(MYevent->hits[i].tdc - maxtick) > 8) continue;
+      if( cumulative_animation && THEevent->hits[i].tdc >  maxtick) continue;
+      if(!cumulative_animation && abs(THEevent->hits[i].tdc - maxtick) > 8) continue;
     }
 
     const int x = pixx*(thishit.plane/2) + 1,
@@ -121,27 +126,45 @@ static void draw_hits(cairo_t * cr, nevent * MYevent, const int maxtick)
   }
 }
 
-static void set_eventn_status(const int currenttick)
+static void set_eventn_status0()
 {
-  set_status(0, "Event %'d, ticks %'d through %'d, %d hits",
-             THEevent.nevent, THEevent.mintick, THEevent.maxtick,
-             (int)THEevent.hits.size());
-  set_status(1, "There are %'d events in this file", (int)theevents.size());
-  if(!can_animate)
-    set_status(2, "");
-  else
-    set_status(2, "Showing tick %d\n", currenttick);
+  nevent * THEevent = &theevents[gevi];
+  set_status(0, "Event %'d (%'d/%'d%s in the file)",
+    THEevent->nevent, gevi+1,
+    (int)theevents.size(), ghave_read_all?"":"+");
 }
 
-gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
+static void set_eventn_status(const int currenttick)
 {
-  nevent * MYevent = (nevent *)data;
+  nevent * THEevent = &theevents[gevi];
 
+  set_eventn_status0();
+  set_status(1, "Ticks %'d through %'d, %d hits",
+             THEevent->mintick, THEevent->maxtick,
+             (int)THEevent->hits.size());
+  if(!can_animate)
+    set_status(2, "Showing all ticks");
+  else
+    set_status(2, "Showing tick %d (%.3f us)", currenttick,
+               currenttick/64.);
+}
+
+static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
+                           __attribute__((unused)) gpointer data)
+{
   // Animate only if drawing for the first time, not if exposed.
   const bool animate = !ee && can_animate;
 
-  for(int ti = animate?MYevent->mintick:MYevent->maxtick;
-      ti <= MYevent->maxtick;
+  static int drawn = 0;
+  if(!ee) drawn++;
+
+  printf("draw_event() %d exposed? %s\n", drawn, ee == NULL?"no":"yes");
+
+  nevent * THEevent = &theevents[gevi];
+
+  cancel_draw = false;
+  for(int ti = animate?THEevent->mintick:THEevent->maxtick;
+      ti <= THEevent->maxtick;
       ti+=4){
 
     set_eventn_status(ti);
@@ -150,46 +173,101 @@ gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee, gpointer data)
     cairo_push_group(cr);
 
     draw_background(cr);
-    draw_hits(cr, MYevent, ti);
+    draw_hits(cr, ti);
 
     cairo_pop_group_to_source(cr);
     cairo_paint(cr);
     cairo_destroy(cr);
 
-    if(ti != MYevent->maxtick){
-      usleep(10e3);
-      bool getout = false;
-      while(g_main_context_iteration(NULL, FALSE)) getout = true;
-      if(getout) break;
+    if(animate && ti != THEevent->maxtick){
+      usleep(15e3);
+
+      // Check if we have started drawing another event while
+      // still in here.  If so, don't keep drawing this one.
+      const int thisdrawn = drawn;
+      while(g_main_context_iteration(NULL, FALSE));
+      if(!can_animate && cancel_draw) break;
+      if(drawn != thisdrawn){
+        printf("Cancelling draw %d, since another one has started\n", thisdrawn);
+        break;
+      }
     }
   }
 
+  printf("Done drawing\n");
+
   return FALSE;
+}
+
+// Used with g_timeout_add() to get an event drawn after re-entering the
+// GTK main loop.
+static gboolean draw_event_from_timer(gpointer data)
+{
+  draw_event(edarea, NULL, data);
+  return FALSE; // don't call me again
 }
 
 struct butpair{
   GtkWidget * next, * prev;
 };
 
-void get_event(nevent & event, const int change)
+// Return true if the event is ready to be drawn.  Otherwise, we will have
+// to fetch it and call draw_event() later.
+static bool get_event(const int change)
 {
-  static int evi = 0;
-  evi += change;
-  if(evi >= (int)theevents.size()) evi = theevents.size() - 1;
-  if(evi <          0            ) evi = 0;
-  event = theevents[evi];
+  if(gevi+change >= (int)theevents.size()){
+    if(ghave_read_all){
+      gevi = theevents.size() - 1;
+    }
+    else{
+      // TODO make this work with abs(change) > 1
+      // XXX this is great except that if events happen while not
+      // in the GTK loop, we get an assertion failure on the console.
+      // Maybe it's harmless, or nearly harmless, in that we just lose
+      // the user input.  Not sure.  It more or less seems to work.
+      need_another_event = true;
+      gtk_main_quit();
+      return false;
+    }
+  }
+  else if(gevi+change < 0){
+    gevi = 0;
+  }
+  else{
+    gevi += change;
+  }
+
+  return true;
 }
 
-/** Display the next or previous event that satisfies the condition
-given in the test function passed in. */
+__attribute__((unused)) static gboolean
+fetch_an_event(__attribute__((unused)) gpointer data)
+{
+  if(ghave_read_all) return FALSE; // don't call this again
+
+  if(gtk_events_pending()){
+    printf("fetch_an_event(): something is going on, never mind\n");
+    return TRUE;
+  }
+
+  printf("Getting another event while nothing else is going on\n");
+
+  // exit GTK event loop to get another event from art
+  prefetching = true;
+  gtk_main_quit();
+  return TRUE;
+}
+
+/** Display the next or previous event. */
 static void to_next(__attribute__((unused)) GtkWidget * widget,
                     gpointer data)
 {
-  bool * forward = (bool *)data;
-  if(*forward) get_event(THEevent,  1);
-  else         get_event(THEevent, -1);
+  printf("to_next()\n");
+  cancel_draw = true;
 
-  draw_event(edarea, 0, &THEevent);
+  const bool * const forward = (const bool * const)data;
+  if(get_event((*forward)?1:-1))
+    draw_event(edarea, NULL, NULL);
 }
 
 static butpair mkbutton(char * label)
@@ -209,21 +287,16 @@ static butpair mkbutton(char * label)
   return thepair;
 }
 
-static void toggle_cum_ani(__attribute__((unused)) GtkWidget * w, gpointer dt)
+static void toggle_cum_ani(__attribute__((unused)) GtkWidget * w,
+                           __attribute__((unused)) gpointer dt)
 {
   cumulative_animation = !cumulative_animation;
-  //if(can_animate) draw_event((GtkWidget *)dt, 0, &THEevent);
 }
 
 static void toggle_animate(__attribute__((unused)) GtkWidget * w, gpointer dt)
 {
   can_animate = !can_animate;
-
-  // This doesn't go well - the ticky box doesn't change state graphically
-  // until it is done, and the animation only works on the second try.  Is that
-  // because I'm catching events inside the animation, and releasing the mouse
-  // button is an event, or something?
-  //draw_event((GtkWidget *)dt, 0, &THEevent);
+  draw_event((GtkWidget *)dt, NULL, NULL);
 }
 
 static void close_window()
@@ -232,9 +305,9 @@ static void close_window()
   exit(0);
 }
 
-void realmain()
+static void setup()
 {
-  gtk_init(0, 0);
+  gtk_init(NULL, NULL);
   GtkWidget * win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(win),
                        "NOE: New nOva Event viewer");
@@ -244,7 +317,7 @@ void realmain()
   edarea = gtk_drawing_area_new();
   gtk_widget_set_size_request(edarea, nplanes_perview*pixx + 2,
                                       ncells_perplane*pixy*2 + viewsep + 2);
-  g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),&THEevent);
+  g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
 
   butpair npbuts = mkbutton((char *)"Event");
 
@@ -252,8 +325,10 @@ void realmain()
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
-  GtkWidget * animate_checkbox = gtk_check_button_new_with_mnemonic("_Animate");
-  GtkWidget * cum_ani_checkbox = gtk_check_button_new_with_mnemonic("_Cumulative animation");
+  GtkWidget * animate_checkbox =
+    gtk_check_button_new_with_mnemonic("_Animate");
+  GtkWidget * cum_ani_checkbox =
+    gtk_check_button_new_with_mnemonic("_Cumulative animation");
 
   for(int i = 0; i < 3; i++){
     statbox[i]  = gtk_text_view_new();
@@ -274,8 +349,28 @@ void realmain()
   gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 4, nrow);
   gtk_widget_show_all(win);
 
-  get_event(THEevent, 0);
-  draw_event(edarea, 0, &THEevent);
+  get_event(0);
+  draw_event(edarea, NULL, NULL);
 
+  g_timeout_add(50 /* ms */, fetch_an_event, NULL);
+}
+
+void realmain(const bool have_read_all)
+{
+  if(have_read_all) ghave_read_all = true;
+  static bool first = true;
+  if(first){
+    first = false;
+    setup();
+  }
+  else{
+    if(prefetching){
+      set_eventn_status0();
+    }
+    else{
+      get_event(1);
+      g_timeout_add(0, draw_event_from_timer, NULL);
+    }
+  }
   gtk_main();
 }
