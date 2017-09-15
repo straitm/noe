@@ -46,7 +46,8 @@ extern std::vector<nevent> theevents;
 static int gevi = 0;
 
 static bool can_animate = false;
-static bool cumulative_animation = false;
+static bool cumulative_animation = true;
+static bool free_running = false;
 
 /* Update the given status bar to the given text and also process all
  * window events.  */
@@ -313,6 +314,13 @@ static void to_next(__attribute__((unused)) GtkWidget * widget,
     draw_event(edarea, NULL, NULL);
 }
 
+static gboolean to_next_free_run(__attribute__((unused)) gpointer data)
+{
+  bool forward = true;
+  to_next(NULL, &forward);
+  return free_running;
+}
+
 static butpair mkbutton(char * label)
 {
   struct butpair thepair;
@@ -330,15 +338,24 @@ static butpair mkbutton(char * label)
   return thepair;
 }
 
-static void toggle_cum_ani(__attribute__((unused)) GtkWidget * w,
+static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
-  cumulative_animation = !cumulative_animation;
+  free_running = GTK_TOGGLE_BUTTON(w)->active;
+
+  if(free_running)
+    g_timeout_add(100 /* ms */, to_next_free_run, NULL);
+}
+
+static void toggle_cum_ani(GtkWidget * w,
+                           __attribute__((unused)) gpointer dt)
+{
+  cumulative_animation = GTK_TOGGLE_BUTTON(w)->active;
 }
 
 static void toggle_animate(__attribute__((unused)) GtkWidget * w, gpointer dt)
 {
-  can_animate = !can_animate;
+  can_animate = GTK_TOGGLE_BUTTON(w)->active;
   draw_event((GtkWidget *)dt, NULL, NULL);
 }
 
@@ -377,7 +394,7 @@ static void setup()
 
   butpair npbuts = mkbutton((char *)"Event");
 
-  const int nrow = 5, ncol = 4;
+  const int nrow = 5, ncol = 5;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
@@ -385,6 +402,10 @@ static void setup()
     gtk_check_button_new_with_mnemonic("_Animate");
   GtkWidget * cum_ani_checkbox =
     gtk_check_button_new_with_mnemonic("_Cumulative animation");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cum_ani_checkbox),
+                               cumulative_animation);
+  GtkWidget * freerun_checkbox =
+    gtk_check_button_new_with_mnemonic("_Free running");
 
   for(int i = 0; i < 3; i++){
     statbox[i]  = gtk_text_view_new();
@@ -395,11 +416,13 @@ static void setup()
 
   g_signal_connect(animate_checkbox, "toggled", G_CALLBACK(toggle_animate), edarea);
   g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani), edarea);
+  g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun), edarea);
 
   gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.prev,      0, 1, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.next,      1, 2, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, 2, 3, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, 3, 4, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, 4, 5, 0, 1);
   for(int i = 0; i < 3; i++)
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 1+i, 2+i);
   gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 4, nrow);
