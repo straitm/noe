@@ -202,8 +202,6 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
   static int drawn = 0;
   if(!ee) drawn++;
 
-  printf("draw_event() %d exposed? %s\n", drawn, ee == NULL?"no":"yes");
-
   nevent * THEevent = &theevents[gevi];
 
   cancel_draw = false;
@@ -240,8 +238,6 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
   }
   cancel_draw = true;
   animating = false;
-
-  printf("Done drawing\n");
 
   return FALSE;
 }
@@ -306,7 +302,6 @@ fetch_an_event(__attribute__((unused)) gpointer data)
 static void to_next(__attribute__((unused)) GtkWidget * widget,
                     gpointer data)
 {
-  printf("to_next()\n");
   cancel_draw = true;
 
   const bool * const forward = (const bool * const)data;
