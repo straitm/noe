@@ -319,6 +319,18 @@ static void toggle_animate(__attribute__((unused)) GtkWidget * w, gpointer dt)
   draw_event((GtkWidget *)dt, NULL, NULL);
 }
 
+static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
+                          GdkEventMotion * gevent,
+                          __attribute__((unused)) gpointer data)
+{
+  if(gevent == NULL) return TRUE; // shouldn't happen
+
+  // TODO something more interesting, like printing the hit's time and ADC
+  printf("%f %f\n", gevent->x, gevent->y);
+
+  return TRUE;
+}
+
 static void close_window()
 {
   gtk_main_quit();
@@ -368,6 +380,9 @@ static void setup()
   for(int i = 0; i < 3; i++)
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 1+i, 2+i);
   gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 4, nrow);
+  g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
+  gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
+                                | GDK_POINTER_MOTION_MASK);
   gtk_widget_show_all(win);
 
   get_event(0);
