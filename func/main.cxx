@@ -356,7 +356,7 @@ static void setup()
   get_event(0);
   draw_event(edarea, NULL, NULL);
 
-  g_timeout_add(5 /* ms */, fetch_an_event, NULL);
+  g_timeout_add(20 /* ms */, fetch_an_event, NULL);
 }
 
 void realmain(const bool have_read_all)
