@@ -121,12 +121,9 @@ static void draw_hits(cairo_t * cr, const int maxtick)
 
     cairo_set_source_rgb(cr, red, green, blue);
 
-    // not the right way to draw a box
-    for(int yi = 0; yi < pixy; yi++){
-      cairo_move_to(cr, x     , y+0.5+yi);
-      cairo_line_to(cr, x+pixx, y+0.5+yi);
-      cairo_stroke(cr);
-    }
+    cairo_rectangle(cr, x+0.5   , y+0.5,
+                        pixx-1, pixy-1);
+    cairo_stroke(cr);
   }
 }
 
