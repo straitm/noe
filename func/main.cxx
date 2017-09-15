@@ -87,11 +87,11 @@ static void draw_background(cairo_t * cr)
   cairo_set_line_width(cr, 1.0);
 
   cairo_rectangle(cr, 0.5, 0.5,
-    nplanes_perview*pixx+1, ncells_perplane+1);
+    nplanes_perview*pixx+1, ncells_perplane*pixy+1);
   cairo_stroke(cr);
 
-  cairo_rectangle(cr, 0.5, 0.5 + ncells_perplane + viewsep,
-    nplanes_perview*pixx+1, ncells_perplane+1);
+  cairo_rectangle(cr, 0.5, 0.5 + ncells_perplane*pixy + viewsep*pixy,
+    nplanes_perview*pixx+1, ncells_perplane*pixy+1);
   cairo_stroke(cr);
 }
 
@@ -112,8 +112,8 @@ static void draw_hits(cairo_t * cr, const int maxtick)
 
     const int x = pixx*(thishit.plane/2) + 1,
       // put y view on the bottom
-      y = ncells_perplane*pixy*2 + viewsep - thishit.cell
-          - (thishit.plane%2)*(ncells_perplane + viewsep);
+      y = pixy*(ncells_perplane*2 + viewsep - thishit.cell
+          - (thishit.plane%2)*(ncells_perplane + viewsep)) - (pixy-1);
 
     float red, green, blue;
 
@@ -121,9 +121,12 @@ static void draw_hits(cairo_t * cr, const int maxtick)
 
     cairo_set_source_rgb(cr, red, green, blue);
 
-    cairo_move_to(cr, x     , y+0.5);
-    cairo_line_to(cr, x+pixx, y+0.5+pixy-1); // TODO: make work for pixy != 1
-    cairo_stroke(cr);
+    // not the right way to draw a box
+    for(int yi = 0; yi < pixy; yi++){
+      cairo_move_to(cr, x     , y+0.5+yi);
+      cairo_line_to(cr, x+pixx, y+0.5+yi);
+      cairo_stroke(cr);
+    }
   }
 }
 
@@ -317,7 +320,7 @@ static void setup()
 
   edarea = gtk_drawing_area_new();
   gtk_widget_set_size_request(edarea, nplanes_perview*pixx + 2,
-                                      ncells_perplane*pixy*2 + viewsep + 2);
+                                      ncells_perplane*pixy*2 + viewsep*pixy + 2);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
 
   butpair npbuts = mkbutton((char *)"Event");
