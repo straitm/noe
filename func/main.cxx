@@ -5,16 +5,30 @@
 #include <string.h>
 #include "event.h"
 
-const int viewsep = 8; // vertical pixels between x and y views
-
-const int nplanes_perview = 16 * 28,
-          ncells_perplane = 12 * 32;
+static const int viewsep = 8; // vertical pixels between x and y views
 
 // Want the nearest small integer box that has an aspect ratio close to 3.36:1.
 // The options would seem to be 3:1 or 7:2.  7:2 makes the detector 3136 pixels
 // wide, which is a bit much, so 3:1 it is, I guess.
-const int pixx = 3,
-          pixy = 1;
+const int pixx = 3, pixy = 1;
+//const int pixx = 7, pixy = 2;
+//const int pixx = 10, pixy = 3;
+
+//static const int nplanes_perview = 8 * 12 + 11,
+//                 first_mucatcher = 8 * 24,
+//                 ncells_perplane = 3 * 32;
+static const int nplanes_perview = 16 * 28,
+                 first_mucatcher = 9999,
+                 ncells_perplane = 12 * 32;
+
+static const int nplanes = 2*nplanes_perview;
+
+static const int ybox = ncells_perplane*pixy,
+                 xboxnomu = pixx*(first_mucatcher/2),
+                 yboxnomu = ybox/3, // 'cause it is.
+                 xbox = pixx*(nplanes_perview +
+                              (first_mucatcher < nplanes?
+                               nplanes_perview - first_mucatcher/2: 0));
 
 GtkWidget * edarea = NULL;
 static GtkWidget * statbox[3];
@@ -86,13 +100,17 @@ static void draw_background(cairo_t * cr)
   cairo_set_source_rgb(cr, 1, 0, 1);
   cairo_set_line_width(cr, 1.0);
 
-  cairo_rectangle(cr, 0.5, 0.5,
-    nplanes_perview*pixx+1, ncells_perplane*pixy+1);
+  cairo_rectangle(cr, 0.5, 0.5, xbox+1, ybox+1);
   cairo_stroke(cr);
 
-  cairo_rectangle(cr, 0.5, 0.5 + ncells_perplane*pixy + viewsep*pixy,
-    nplanes_perview*pixx+1, ncells_perplane*pixy+1);
+  cairo_rectangle(cr, 0.5, 0.5 + ybox + viewsep*pixy, xbox+1, ybox+1);
   cairo_stroke(cr);
+
+  if(first_mucatcher < nplanes){
+    cairo_rectangle(cr, 1.5 + xboxnomu, 0.5 + ybox + viewsep*pixy,
+                        xbox-xboxnomu, yboxnomu);
+    cairo_stroke(cr);
+  }
 }
 
 static void draw_hits(cairo_t * cr, const int maxtick)
@@ -110,7 +128,8 @@ static void draw_hits(cairo_t * cr, const int maxtick)
       if(!cumulative_animation && abs(THEevent->hits[i].tdc - maxtick) > 8) continue;
     }
 
-    const int x = pixx*(thishit.plane/2) + 1,
+    const int x = 1 + pixx*((thishit.plane
+                  +(thishit.plane > first_mucatcher?thishit.plane-first_mucatcher:0))/2),
       // put y view on the bottom
       y = pixy*(ncells_perplane*2 + viewsep - thishit.cell
           - (thishit.plane%2)*(ncells_perplane + viewsep)) - (pixy-1);
@@ -316,8 +335,9 @@ static void setup()
 
 
   edarea = gtk_drawing_area_new();
-  gtk_widget_set_size_request(edarea, nplanes_perview*pixx + 2,
-                                      ncells_perplane*pixy*2 + viewsep*pixy + 2);
+  gtk_widget_set_size_request(edarea,
+                              xbox + 2,
+                              ybox*2 + viewsep*pixy + 2);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
 
   butpair npbuts = mkbutton((char *)"Event");
