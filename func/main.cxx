@@ -7,32 +7,65 @@
 
 static const int viewsep = 8; // vertical pixels between x and y views
 
+// We're going to assume the ND until we see a hit that indicates it's FD
+static bool isfd = false;
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+static const int NDnplanes_perview = 8 * 12 + 11,
+                 NDfirst_mucatcher = 8 * 24,
+                 NDncells_perplane = 3 * 32;
+static const int FDnplanes_perview = 16 * 28,
+                 FDfirst_mucatcher = 9999, // i.e. no muon catcher
+                 FDncells_perplane = 12 * 32;
+
 // Want the nearest small integer box that has an aspect ratio close to 3.36:1.
-// The options would seem to be 3:1 or 7:2.  7:2 makes the detector 3136 pixels
-// wide, which is a bit much, so 3:1 it is, I guess.
-//const int pixx = 3, pixy = 1;
-//const int pixx = 7, pixy = 2;
-const int pixx = 10, pixy = 3;
-//const int pixx = 13, pixy = 4;
-//const int pixx = 17, pixy = 5;
+// Options: 3:1, 2:7, 3:10, 4:13, 5:17, etc.
+static const int FDpixx = 3, FDpixy = 1;
+static const int NDpixx = 10, NDpixy = 3;
 
-static const int nplanes_perview = 8 * 12 + 11,
-                 first_mucatcher = 8 * 24,
-                 ncells_perplane = 3 * 32;
-//static const int nplanes_perview = 16 * 28,
-//                 first_mucatcher = 9999,
-//                 ncells_perplane = 12 * 32;
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+static int nplanes_perview = NDnplanes_perview,
+           first_mucatcher = NDfirst_mucatcher,
+           ncells_perplane = NDncells_perplane;
 
-static const int nplanes = 2*nplanes_perview;
+static int pixx = NDpixx, pixy = NDpixy;
 
-static const int ybox = ncells_perplane*pixy,
-                 xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */,
-                 yboxnomu = ybox/3, // 'cause it is.
-                 xbox = pixx*(nplanes_perview +
-                              (first_mucatcher < nplanes?
-                               nplanes_perview - first_mucatcher/2: 0));
+static int nplanes = 2*nplanes_perview;
+static int ybox, xboxnomu, yboxnomu, xbox;
 
-GtkWidget * edarea = NULL;
+static GtkWidget * edarea = NULL;
+
+static void setboxes()
+{
+  ybox = ncells_perplane*pixy,
+  xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */,
+  yboxnomu = ybox/3, // 'cause it is.
+  xbox = pixx*(nplanes_perview +
+               (first_mucatcher < nplanes?
+               nplanes_perview - first_mucatcher/2: 0));
+  if(edarea != NULL)
+    gtk_widget_set_size_request(edarea,
+                                xbox + 2 /* border */ + pixx/2 /* plane stagger */,
+                                ybox*2 + viewsep*pixy + 2);
+}
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+static void setfd()
+{
+  isfd = true;
+
+  nplanes_perview = FDnplanes_perview;
+  first_mucatcher = FDfirst_mucatcher;
+  ncells_perplane = FDncells_perplane;
+
+  nplanes = 2*nplanes_perview;
+
+  pixx = FDpixx;
+  pixy = FDpixy;
+
+  setboxes();
+}
+
 static GtkWidget * statbox[3];
 static GtkTextBuffer * stattext[3];
 
@@ -203,6 +236,8 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
   if(!ee) drawn++;
 
   nevent * THEevent = &theevents[gevi];
+
+  if(!isfd && THEevent->fdlike) setfd();
 
   cancel_draw = false;
   for(int ti = animate?THEevent->mintick:THEevent->maxtick;
@@ -382,9 +417,7 @@ static void setup()
 
 
   edarea = gtk_drawing_area_new();
-  gtk_widget_set_size_request(edarea,
-                              xbox + 2 /* border */ + pixx/2 /* plane stagger */,
-                              ybox*2 + viewsep*pixy + 2);
+  setboxes();
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
 
   butpair npbuts = mkbutton((char *)"Event");
