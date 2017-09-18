@@ -115,7 +115,7 @@ static void colorhit(const int32_t adc, float & red, float & green, float & blue
   // Oh so hacky!
   const float graycut = 60;
   const float nextcut = 120;
-  if(adc < graycut) red = green = blue = 0.5*adc/graycut;
+  if(adc < graycut) red = green = blue = 0.2 + 0.3*adc/graycut;
   else if(adc < nextcut)
     blue  = 0.5 + 0.5*(adc-graycut)/(nextcut-graycut),
     red   = 0.5 - 0.5*(adc-graycut)/(nextcut-graycut),
