@@ -1,3 +1,5 @@
+#include <signal.h>
+
 #include <vector>
 
 #include "art/Framework/Core/EDProducer.h"
@@ -31,6 +33,8 @@ void noe::endJob()
 
 void noe::produce(art::Event& evt)
 {
+  signal(SIGINT, SIG_DFL); // just exit on Ctrl-C
+
   art::Handle< std::vector<rb::CellHit> > cellhits;
 
   evt.getByLabel("calhit", cellhits);
