@@ -92,6 +92,9 @@ static int gevi = 0;
 // Must start false, because the first thing that happens is that we get two
 // expose events (I don't know why) and I don't want to handle an animated
 // expose when we haven't drawn yet at all.
+//
+// XXX Still a bug, probably related to the mouseover, that makes the
+// animation run multiple times
 static bool animate = false;
 
 static bool cumulative_animation = true;
@@ -700,6 +703,11 @@ static void setup()
     g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
                                 | GDK_POINTER_MOTION_MASK);
+
+  // This isn't the size I want, but along with requesting the size of the
+  // edarea widget, it has the desired effect, at least more or less.
+  gtk_window_set_default_size(GTK_WINDOW(win), 400, 300);
+
   gtk_widget_show_all(win);
 
   get_event(0);

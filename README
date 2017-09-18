@@ -23,10 +23,19 @@ A non-exhaustive list of things that are not priorities:
 
 * Have the ability to resize the display.
 
+* Zooming.
+
 * Be highly customizable, e.g. have user-adjustable colors.
 
 * Have automatic availability of new types of reconstructed objects.  Most
   likely only a fixed list of the most commonly used objects will be available.
+
+# Running it
+
+nova -c noejob.fcl <art file>
+
+The art file must have calibrated hits in it, i.e. rb::CellHits with the
+label "calhit".  NOE does not run on artdaq files.
 
 # Name
 
