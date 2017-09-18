@@ -5,7 +5,7 @@
 #include <string.h>
 #include "event.h"
 
-static const int viewsep = 8; // vertical pixels between x and y views
+static const int viewsep = 8; // vertical cell widths between x and y views
 
 // We're going to assume the ND until we see a hit that indicates it's FD
 static bool isfd = false;
@@ -37,16 +37,20 @@ static GtkWidget * edarea = NULL;
 
 static void setboxes()
 {
-  ybox = ncells_perplane*pixy,
+  ybox = ncells_perplane*pixy + pixy/2 /* cell stagger */,
   xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */,
-  yboxnomu = ybox/3, // 'cause it is.
+
+  // muon catcher is 1/3 empty.  Do not include cell stagger here since we want
+  // the extra half cells to be inside the active box.
+  yboxnomu = (ncells_perplane/3)*pixy,
+
   xbox = pixx*(nplanes_perview +
                (first_mucatcher < nplanes?
                nplanes_perview - first_mucatcher/2: 0));
   if(edarea != NULL)
     gtk_widget_set_size_request(edarea,
                                 xbox + 2 /* border */ + pixx/2 /* plane stagger */,
-                                ybox*2 + viewsep*pixy + 2);
+                                ybox*2 + viewsep*pixy);
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -136,6 +140,7 @@ static void draw_background(cairo_t * cr)
   cairo_set_source_rgb(cr, 1, 0, 1);
   cairo_set_line_width(cr, 1.0);
 
+  // X-view box
   cairo_rectangle(cr, 0.5+pixx/2 /* plane stagger */, 0.5, xbox+1, ybox+1);
   cairo_stroke(cr);
 
@@ -145,12 +150,14 @@ static void draw_background(cairo_t * cr)
   // the y view, they are to the right, but I don't want the box to include them.
   const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
 
-  cairo_rectangle(cr, 0.5, 0.5 + ybox + viewsep*pixy,
+  // Y-view main box
+  cairo_rectangle(cr, 0.5, 0.5 + ybox + viewsep*pixy - pixy/2 /* cell stagger */,
                       xbox+1-hacky_subtraction_for_y_mucatch, ybox+1);
   cairo_stroke(cr);
 
+  // Y-view muon catcher empty box
   if(hasmucatch){
-    cairo_rectangle(cr, 1.5 + xboxnomu, 0.5 + ybox + viewsep*pixy,
+    cairo_rectangle(cr, 1.5 + xboxnomu, 0.5 + ybox + viewsep*pixy - pixy/2,
                         xbox-xboxnomu-hacky_subtraction_for_y_mucatch, yboxnomu);
     cairo_stroke(cr);
   }
