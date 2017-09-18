@@ -1,12 +1,6 @@
 #include "noe.fcl"
-#include "services.fcl"
 
 process_name: noe
-
-source:
-{
-  module_type: RootInput
-}
 
 physics:
 {
@@ -17,4 +11,3 @@ physics:
 
   reco: [ noe ]
 }
-

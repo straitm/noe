@@ -3,12 +3,8 @@ LIB_TYPE    := shared
 LIB         := lib$(PACKAGE)
 LIBCXXFILES := $(wildcard *.cxx)
 
-BINLIBS = -l$(PACKAGE) $(ROOTLIBS) $(ROOTGLIBS)
-
 override CPPFLAGS := -Wall -Wextra `pkg-config --cflags gtk+-2.0`
 
 override LIBLIBS += -lgtk-x11-2.0 -lcairo
 
-########################################################################
 include SoftRelTools/standard.mk
-include SoftRelTools/arch_spec_root.mk

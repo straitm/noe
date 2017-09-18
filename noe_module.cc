@@ -14,22 +14,20 @@ std::vector<nevent> theevents;
 namespace noe {
 class noe : public art::EDProducer {
   public:
-  explicit noe(fhicl::ParameterSet const& pset);
-  virtual ~noe();
+  noe(fhicl::ParameterSet const& pset);
+  ~noe();
   void produce(art::Event& evt);
   void endJob();
 };
 
-noe::noe(fhicl::ParameterSet const & pset): EDProducer()
-{
-}
+noe::noe(fhicl::ParameterSet const & pset) { }
+
+noe::~noe() { }
 
 void noe::endJob()
 {
   realmain(true);
 }
-
-noe::~noe() { }
 
 void noe::produce(art::Event& evt)
 {
@@ -57,4 +55,3 @@ void noe::produce(art::Event& evt)
 DEFINE_ART_MODULE(noe);
 
 }
-//////////////////////////////////////////////////////////////////////////
