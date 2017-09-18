@@ -34,6 +34,8 @@ static int nplanes = 2*nplanes_perview;
 static int ybox, xboxnomu, yboxnomu, xbox;
 
 static GtkWidget * edarea = NULL;
+static GtkWidget * freerun_checkbox = NULL;
+static gulong mouseover_handle = 0;
 
 static void setboxes()
 {
@@ -95,22 +97,29 @@ static bool animate = false;
 static bool cumulative_animation = true;
 static bool free_running = false;
 
+static int active_plane = -1, active_cell = -1;
+
+static const int MAXSTATUS = 1024;
+
 /* Update the given status bar to the given text and also process all
  * window events.  */
 static void set_status(const int boxn, const char * format, ...)
 {
   va_list ap;
   va_start(ap, format);
-  static char buf[1024];
-  vsnprintf(buf, 1023, format, ap);
+  static char buf[MAXSTATUS];
+  vsnprintf(buf, MAXSTATUS-1, format, ap);
 
   gtk_text_buffer_set_text(stattext[boxn], buf, strlen(buf));
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[boxn]),
                            stattext[boxn]);
+
+  // Makes performance much better for reasons I don't understand
   while(g_main_context_iteration(NULL, FALSE));
 }
 
-static void colorhit(const int32_t adc, float & red, float & green, float & blue)
+static void colorhit(const int32_t adc, float & red, float & green, float & blue,
+                     const bool active)
 {
   // Oh so hacky!
   const float graycut = 60;
@@ -129,6 +138,21 @@ static void colorhit(const int32_t adc, float & red, float & green, float & blue
                       red   =   (adc-1200)/200.0,
                       blue = 0;
   else red = 1, green = blue  = 0;
+
+  // Brighten this hit while trying to retain some of its original color, but
+  // just make it white if that is what it takes to make a difference.
+  if(active){
+    const float goal = 1.3;
+    const float left = 3 - red - blue - green;
+    if(left < goal){
+      red = blue = green = 1;
+    }
+    else{
+      red += goal*(1 - red)/left;
+      blue += goal*(1 - blue)/left;
+      green += goal*(1 - green)/left;
+    }
+  }
 }
 
 __attribute__((unused)) static bool by_charge(const hit & a, const hit & b)
@@ -214,24 +238,73 @@ static int screen_y_to_xview(const int y)
   return y <= 2 /* border */ + ybox + (viewsep*pixy)/2;
 }
 
-// Given a screen position, returns the plane number. Any x position within
-// the boundaries of hits displayed in a plane, including the right and left
+// Given a screen position, returns the plane number. Any x position within the
+// boundaries of hits displayed in a plane, including the right and left
 // pixels, will return the same plane number.  In the muon catcher, return the
-// nearest plane in the view if the screen position is in dead material.
-// If the screen position is outside the detector boxes, return the plane for
-// the closer box.
+// nearest plane in the view if the screen position is in dead material.  If
+// the screen position is outside the detector boxes to the right or left or
+// above or below both views, return -1.  If it is between the two views,
+// return the plane for the closer view.
 static int screen_to_plane(const int x, const int y)
 {
-  return screen_y_to_xview(y);
+  const bool xview = screen_y_to_xview(y);
+
+  // The number of the first muon catcher plane counting only planes
+  // in one view.
+  const int halfmucatch = (first_mucatcher)/2 + !xview;
+
+  // Account for the plane stagger and border width.
+  int effx;
+  if(x-2 >= halfmucatch*pixx) effx = x - 2 - pixx/2;
+  else effx = x - 2;
+
+  // Half the plane number, as long as we're not in the muon catcher
+  int halfp = xview? (effx-pixx/2)/pixx
+                    :(    effx   )/pixx;
+
+  // Fix up the case of being in the muon catcher
+  if(halfp > halfmucatch) halfp = halfmucatch +
+                                  (halfp - halfmucatch)/2;
+
+  // The plane number, except it might be out of range
+  const int p = halfp*2 + xview;
+
+  if(p < xview) return -1;
+  if(p >= nplanes) return -1;
+  return p;
 }
 
-// Given a screen position, returns the cell number.  If no cell is in this
+// Given a screen position, returns the cell number.  If no hit cell is in this
 // position, return the number of the closest cell in screen y coordinates,
-// i.e. the closest cell that is directly above or below the screen position,
-// even if the closest one is in another direction.
+// i.e. the closest hit cell that is directly above or below the screen position,
+// even if the closest one is in another direction.  But if this position is
+// outside the detector boxes on the right or left, return -1.
 static int screen_to_cell(const int x, const int y)
 {
-  return 0;
+  const bool xview = screen_y_to_xview(y);
+  const int plane = screen_to_plane(x, y);
+  const bool celldown = !((plane/2)%2 ^ (plane%2));
+  const int effy = (xview? y
+                         : y - ybox - viewsep*pixy + 1)
+                   - celldown*(pixy/2) - 2;
+
+  const int c = ncells_perplane - effy/pixy - 1;
+  if(c < 0) return -1;
+  if(c >= ncells_perplane) return -1;
+  if(plane >= first_mucatcher && !xview && c >= 2*ncells_perplane/3) return -1;
+
+  std::vector<hit> & THEhits = theevents[gevi].hits;
+  int mindist = 9999, closestcell = -1;
+  for(unsigned int i = 0; i < THEhits.size(); i++){
+    if(THEhits[i].plane != plane) continue;
+    const int dist = abs(THEhits[i].cell - c);
+    if(dist < mindist){
+      mindist = dist;
+      closestcell = THEhits[i].cell;
+    }
+  }
+
+  return closestcell;
 }
 
 static void draw_hits(cairo_t * cr, const bool fullredraw)
@@ -267,7 +340,8 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
 
     float red, green, blue;
 
-    colorhit(thishit.adc, red, green, blue);
+    colorhit(thishit.adc, red, green, blue,
+             thishit.plane == active_plane && thishit.cell == active_cell);
 
     cairo_set_source_rgb(cr, red, green, blue);
 
@@ -279,33 +353,77 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
 
 static void set_eventn_status0()
 {
+  if(theevents.empty()){
+    set_status(0, "No events in file");
+    return;
+  }
+
   nevent * THEevent = &theevents[gevi];
   set_status(0, "Event %'d (%'d/%'d%s in the file)",
     THEevent->nevent, gevi+1,
     (int)theevents.size(), ghave_read_all?"":"+");
 }
 
-static void set_eventn_status(const int currenttick)
+static void set_eventn_status1()
 {
   nevent * THEevent = &theevents[gevi];
 
-  set_eventn_status0();
-  set_status(1, "Ticks %'d through %'d, %d hits",
-             THEevent->mintick, THEevent->maxtick,
-             (int)THEevent->hits.size());
+  char status1[MAXSTATUS];
+
+  int pos = snprintf(status1, MAXSTATUS-1, "Ticks %'d through %'d.  ",
+             THEevent->mintick, THEevent->maxtick);
   if(!animate)
-    set_status(2, "Showing all ticks");
+    pos += snprintf(status1+pos, MAXSTATUS-1-pos, "Showing all ticks");
   else if(cumulative_animation)
-    set_status(2, "Showing ticks %d through %d (%.3f us)", THEevent->mintick,
-               currenttick, currenttick/64.);
+    pos += snprintf(status1+pos, MAXSTATUS-1-pos,
+                    "Showing ticks %d through %d (%.3f us)",
+                    THEevent->mintick, currenttick, currenttick/64.);
   else
-    set_status(2, "Showing tick %d (%.3f us)", currenttick,
-               currenttick/64.);
+    pos += snprintf(status1+pos, MAXSTATUS-1-pos,
+                    "Showing tick %d (%.3f us)",
+                    currenttick, currenttick/64.);
+
+  set_status(1, status1);
+}
+
+static void set_eventn_status2()
+{
+  if(active_plane < 0 || active_cell < 0){
+    set_status(2, "%souseover a cell for more information",
+      animate || free_running?"Turn off animation and free running and m":"M");
+    return;
+  }
+
+  char status2[MAXSTATUS];
+  int pos = snprintf(status2, MAXSTATUS-1, "Plane %d, cell %d: ",
+                     active_plane, active_cell);
+
+  std::vector<hit> & THEhits = theevents[gevi].hits;
+  for(unsigned int i = 0; i < THEhits.size(); i++)
+    if(THEhits[i].plane == active_plane &&
+       THEhits[i].cell  == active_cell)
+      pos += snprintf(status2+pos, MAXSTATUS-1-pos,
+                      "TDC = %d, ADC = %d; ",
+                      THEhits[i].tdc, THEhits[i].adc);
+  set_status(2, status2);
+}
+
+static void set_eventn_status()
+{
+  set_eventn_status0();
+
+  if(theevents.empty()) return;
+
+  set_eventn_status1();
+  set_eventn_status2();
 }
 
 static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
                            __attribute__((unused)) gpointer data)
 {
+  set_eventn_status();
+  if(theevents.empty()) return TRUE;
+
   static int drawn = 0;
   const bool exposed = ee != NULL;
   if(!exposed) drawn++;
@@ -325,7 +443,7 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
   for(currenttick = thisfirsttick; currenttick <= thislasttick; currenttick+=4){
 
-    set_eventn_status(currenttick);
+    set_eventn_status();
 
     cairo_t * cr = gdk_cairo_create(widg->window);
     cairo_push_group(cr);
@@ -351,18 +469,14 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
       // still in here.  If so, don't keep drawing this one.
       const int thisdrawn = drawn;
       while(g_main_context_iteration(NULL, FALSE));
-      if(cancel_draw) break;
-      if(drawn != thisdrawn){
-        printf("Cancelling draw %d, since another one has started\n", thisdrawn);
-        break;
-      }
+      if(cancel_draw || drawn != thisdrawn) break;
     }
   }
 
   // If we are moving to a new detector event, make sure we don't keep trying
   // to draw this detector event.  However, if we're here because of an X
   // expose event, we do want to keep going.
-  if(ee == NULL){
+  if(!exposed){
     cancel_draw = true;
     animating = false;
   }
@@ -441,7 +555,15 @@ static gboolean to_next_free_run(__attribute__((unused)) gpointer data)
 {
   bool forward = true;
   to_next(NULL, &forward);
-  return free_running;
+
+  const bool atend = gevi == (int)theevents.size()-1 && ghave_read_all;
+
+  if(atend){
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox),
+                                 FALSE);
+    free_running = false;
+  }
+  return free_running && !atend;
 }
 
 static butpair mkbutton(char * label)
@@ -461,11 +583,46 @@ static butpair mkbutton(char * label)
   return thepair;
 }
 
+static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
+                          GdkEventMotion * gevent,
+                          __attribute__((unused)) gpointer data)
+{
+  if(gevent == NULL) return TRUE; // shouldn't happen
+  if(animate) return TRUE; // Too hard to handle, and unlikely
+                           // that the user wants it anyway.
+  if(theevents.empty()) return TRUE; // No coordinates in this case
+
+  active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
+  active_cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
+
+  // XXX very heavyhanded
+  draw_event(edarea, NULL, NULL);
+
+  return TRUE;
+}
+
+static void sub_toggle_mouseover()
+{
+  // Don't listen for mouseovers while animating or free running.  Otherwise,
+  // with animation, we get into odd situations that cause the animation to
+  // loop many times even if we try to ignore the signals at a higher level.
+  // With free running, we draw the current event many times and appear to be
+  // stuck.
+  if(free_running || animate){
+    g_signal_handler_disconnect(edarea, mouseover_handle);
+    active_plane = active_cell = -1;
+  }
+  else{
+    mouseover_handle =
+      g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
+  }
+}
+
 static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
   free_running = GTK_TOGGLE_BUTTON(w)->active;
-
+  sub_toggle_mouseover();
   if(free_running)
     g_timeout_add(100 /* ms */, to_next_free_run, NULL);
 }
@@ -482,19 +639,8 @@ static void toggle_cum_ani(GtkWidget * w,
 static void toggle_animate(__attribute__((unused)) GtkWidget * w, gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
+  sub_toggle_mouseover();
   draw_event((GtkWidget *)dt, NULL, NULL);
-}
-
-static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
-                          GdkEventMotion * gevent,
-                          __attribute__((unused)) gpointer data)
-{
-  if(gevent == NULL) return TRUE; // shouldn't happen
-
-  // TODO something more interesting, like printing the hit's time and ADC
-  printf("%f %f\n", gevent->x, gevent->y);
-
-  return TRUE;
 }
 
 static void close_window()
@@ -528,7 +674,7 @@ static void setup()
     gtk_check_button_new_with_mnemonic("_Cumulative animation");
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cum_ani_checkbox),
                                cumulative_animation);
-  GtkWidget * freerun_checkbox =
+  freerun_checkbox =
     gtk_check_button_new_with_mnemonic("_Free running");
 
   for(int i = 0; i < 3; i++){
@@ -550,7 +696,8 @@ static void setup()
   for(int i = 0; i < 3; i++)
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 1+i, 2+i);
   gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 4, nrow);
-  g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
+  mouseover_handle =
+    g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
                                 | GDK_POINTER_MOTION_MASK);
   gtk_widget_show_all(win);
@@ -558,7 +705,8 @@ static void setup()
   get_event(0);
   draw_event(edarea, NULL, NULL);
 
-  g_timeout_add(20 /* ms */, fetch_an_event, NULL);
+  if(!ghave_read_all)
+    g_timeout_add(20 /* ms */, fetch_an_event, NULL);
 }
 
 void realmain(const bool have_read_all)
