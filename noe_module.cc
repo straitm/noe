@@ -31,6 +31,49 @@ void noe::endJob()
   realmain(true);
 }
 
+// Inject a test event with all FD cells hit
+__attribute__((unused)) static void add_test_fd_event()
+{
+  nevent ev;
+  ev.nevent = 0;
+  ev.nrun = 0;
+  ev.nsubrun = 0;
+
+  for(unsigned int c = 0; c < 12 * 32; c++){
+    for(unsigned int p = 0; p < 32 * 28; p++){
+      hit thehit;
+      thehit.cell = c;
+      thehit.plane = p;
+      thehit.adc =  (c*p)%124;
+      thehit.tdc = ((c*p)%432)*4;
+      ev.addhit(thehit);
+    }
+  }
+  theevents.push_back(ev);
+}
+
+// Inject a test event with all ND cells hit
+__attribute__((unused)) static void add_test_nd_event()
+{
+  nevent ev;
+  ev.nevent = 0;
+  ev.nrun = 0;
+  ev.nsubrun = 0;
+
+  for(unsigned int c = 0; c < 3 * 32; c++){
+    for(unsigned int p = 0; p < 2 * (8 * 12 + 11); p++){
+      if(p >= 2 * 8 * 12 && c >= 2 * 32 && p%2 == 0) continue;
+      hit thehit;
+      thehit.cell = c;
+      thehit.plane = p;
+      thehit.adc = (c*p)%1234;
+      thehit.tdc = ((c*p)% 234)*4;
+      ev.addhit(thehit);
+    }
+  }
+  theevents.push_back(ev);
+}
+
 void noe::produce(art::Event& evt)
 {
   signal(SIGINT, SIG_DFL); // just exit on Ctrl-C
@@ -38,6 +81,10 @@ void noe::produce(art::Event& evt)
   art::Handle< std::vector<rb::CellHit> > cellhits;
 
   evt.getByLabel("calhit", cellhits);
+
+#if 0
+  if(theevents.empty()) add_test_nd_event();
+#endif
 
   nevent ev;
   ev.nevent = evt.event();
