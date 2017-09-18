@@ -70,6 +70,9 @@ static void setfd()
   setboxes();
 }
 
+extern std::vector<nevent> theevents;
+
+
 static GtkWidget * statbox[3];
 static GtkTextBuffer * stattext[3];
 
@@ -77,12 +80,18 @@ static bool ghave_read_all = false;
 static bool need_another_event = false;
 static bool prefetching = false;
 static bool cancel_draw = false;
+static bool switch_to_cumulative = false;
+
 static bool animating = false;
-extern std::vector<nevent> theevents;
+static int currenttick = 0;
 
 static int gevi = 0;
 
-static bool can_animate = false;
+// Must start false, because the first thing that happens is that we get two
+// expose events (I don't know why) and I don't want to handle an animated
+// expose when we haven't drawn yet at all.
+static bool animate = false;
+
 static bool cumulative_animation = true;
 static bool free_running = false;
 
@@ -163,7 +172,69 @@ static void draw_background(cairo_t * cr)
   }
 }
 
-static void draw_hits(cairo_t * cr, const int maxtick)
+// Given the plane, returns the left side of the screen position in Cairo
+// coordinates.  More precisely, returns half a pixel to the left of the left
+// side.
+static int det_to_screen_x(const int plane)
+{
+  const bool xview = plane%2 == 1;
+  return 1 + // Don't overdraw the border
+    pixx*((plane
+
+         // space out the muon catcher planes
+         +(plane > first_mucatcher?plane-first_mucatcher:0))/2)
+
+        // stagger x and y planes
+      + xview*pixx/2;
+}
+
+// Given the plane and cell, return the top of the screen position in
+// Cairo coordinates.  More precisely, returns half a pixel above the top.
+static int det_to_screen_y(const int plane, const int cell)
+{
+  const bool xview = plane%2 == 1;
+
+  // In each view, every other plane is offset by half a cell width
+  const bool celldown = !((plane/2)%2 ^ (plane%2));
+
+  // put y view on the bottom
+  return pixy*(ncells_perplane*2 + viewsep - cell
+          - xview*(ncells_perplane + viewsep)) - (pixy-1)
+
+         // Physical stagger of planes in each view
+         + celldown*pixy/2;
+}
+
+// Given a screen y position, return true if we are in the x-view, or if we are
+// in neither view, return true if we are closer to the x-view.  The empty part
+// of the detector above the muon catcher is considered to be part of the
+// y-view as though the detector were a rectangle in both views.
+static int screen_y_to_xview(const int y)
+{
+  return y <= 2 /* border */ + ybox + (viewsep*pixy)/2;
+}
+
+// Given a screen position, returns the plane number. Any x position within
+// the boundaries of hits displayed in a plane, including the right and left
+// pixels, will return the same plane number.  In the muon catcher, return the
+// nearest plane in the view if the screen position is in dead material.
+// If the screen position is outside the detector boxes, return the plane for
+// the closer box.
+static int screen_to_plane(const int x, const int y)
+{
+  return screen_y_to_xview(y);
+}
+
+// Given a screen position, returns the cell number.  If no cell is in this
+// position, return the number of the closest cell in screen y coordinates,
+// i.e. the closest cell that is directly above or below the screen position,
+// even if the closest one is in another direction.
+static int screen_to_cell(const int x, const int y)
+{
+  return 0;
+}
+
+static void draw_hits(cairo_t * cr, const bool fullredraw)
 {
   cairo_set_line_width(cr, 1.0);
 
@@ -173,30 +244,26 @@ static void draw_hits(cairo_t * cr, const int maxtick)
 
   for(unsigned int i = 0; i < THEevent->hits.size(); i++){
     hit & thishit = THEevent->hits[i];
-    if(can_animate){
-      if( cumulative_animation && THEevent->hits[i].tdc >  maxtick) continue;
-      if(!cumulative_animation && abs(THEevent->hits[i].tdc - maxtick) > 8) continue;
+
+    // If we're not animating, we're just going to draw everything no matter
+    // what.  Otherwise, we need to know whether to draw just the new stuff
+    // or everthing up to the current tick.
+    if(animate){
+      if(cumulative_animation){
+        if(fullredraw){
+          if(THEevent->hits[i].tdc > currenttick) continue;
+        }
+        else{
+          if(THEevent->hits[i].tdc != currenttick) continue;
+        }
+      }
+      else if(abs(THEevent->hits[i].tdc - currenttick) > 8){
+        continue;
+      }
     }
 
-    const bool xview = thishit.plane%2 == 1;
-    const bool celldown = !((thishit.plane/2)%2 ^ (thishit.plane%2));
-
-    const int screenx = 1 + // Don't overdraw the border
-      pixx*((thishit.plane
-
-           // space out the muon catcher planes
-           +(thishit.plane > first_mucatcher?thishit.plane-first_mucatcher:0))/2)
-
-          // stagger x and y planes
-        + xview*pixx/2
-
-
-      // put y view on the bottom
-      , screeny = pixy*(ncells_perplane*2 + viewsep - thishit.cell
-          - xview*(ncells_perplane + viewsep)) - (pixy-1)
-
-           // Physical stagger of planes in each view
-         + celldown*pixy/2;
+    const int screenx = det_to_screen_x(thishit.plane),
+              screeny = det_to_screen_y(thishit.plane, thishit.cell);
 
     float red, green, blue;
 
@@ -226,8 +293,11 @@ static void set_eventn_status(const int currenttick)
   set_status(1, "Ticks %'d through %'d, %d hits",
              THEevent->mintick, THEevent->maxtick,
              (int)THEevent->hits.size());
-  if(!can_animate)
+  if(!animate)
     set_status(2, "Showing all ticks");
+  else if(cumulative_animation)
+    set_status(2, "Showing ticks %d through %d (%.3f us)", THEevent->mintick,
+               currenttick, currenttick/64.);
   else
     set_status(2, "Showing tick %d (%.3f us)", currenttick,
                currenttick/64.);
@@ -236,34 +306,44 @@ static void set_eventn_status(const int currenttick)
 static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
                            __attribute__((unused)) gpointer data)
 {
-  // Animate only if drawing for the first time, not if exposed.
-  const bool animate = !ee && can_animate;
-
   static int drawn = 0;
-  if(!ee) drawn++;
+  const bool exposed = ee != NULL;
+  if(!exposed) drawn++;
 
   nevent * THEevent = &theevents[gevi];
 
   if(!isfd && THEevent->fdlike) setfd();
 
   cancel_draw = false;
-  for(int ti = animate?THEevent->mintick:THEevent->maxtick;
-      ti <= THEevent->maxtick;
-      ti+=4){
 
-    set_eventn_status(ti);
+  const int thisfirsttick = !animate? THEevent->maxtick
+                          : exposed ? currenttick
+                          :           THEevent->mintick,
+            thislasttick =  !animate?THEevent->maxtick
+                          : exposed ? currenttick
+                          :           THEevent->maxtick;
+
+  for(currenttick = thisfirsttick; currenttick <= thislasttick; currenttick+=4){
+
+    set_eventn_status(currenttick);
 
     cairo_t * cr = gdk_cairo_create(widg->window);
     cairo_push_group(cr);
 
-    draw_background(cr);
-    draw_hits(cr, ti);
+    // Do not blank the display in the middle of an animation unless necessary
+    const bool need_redraw = switch_to_cumulative || exposed || !animate ||
+       (animate && currenttick == THEevent->mintick) ||
+       (animate && !cumulative_animation);
+    switch_to_cumulative = false;
+    if(need_redraw) draw_background(cr);
+
+    draw_hits(cr, need_redraw);
 
     cairo_pop_group_to_source(cr);
     cairo_paint(cr);
     cairo_destroy(cr);
 
-    if(animate && ti != THEevent->maxtick){
+    if(animate && currenttick != THEevent->maxtick){
       usleep(15e3);
       animating = true;
 
@@ -278,8 +358,14 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
       }
     }
   }
-  cancel_draw = true;
-  animating = false;
+
+  // If we are moving to a new detector event, make sure we don't keep trying
+  // to draw this detector event.  However, if we're here because of an X
+  // expose event, we do want to keep going.
+  if(ee == NULL){
+    cancel_draw = true;
+    animating = false;
+  }
 
   return FALSE;
 }
@@ -388,11 +474,14 @@ static void toggle_cum_ani(GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
   cumulative_animation = GTK_TOGGLE_BUTTON(w)->active;
+
+  // Must note that we've switched to trigger a full redraw
+  if(cumulative_animation) switch_to_cumulative = true;
 }
 
 static void toggle_animate(__attribute__((unused)) GtkWidget * w, gpointer dt)
 {
-  can_animate = GTK_TOGGLE_BUTTON(w)->active;
+  animate = GTK_TOGGLE_BUTTON(w)->active;
   draw_event((GtkWidget *)dt, NULL, NULL);
 }
 
