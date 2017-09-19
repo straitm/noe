@@ -755,6 +755,14 @@ static void setup()
     g_timeout_add(20 /* ms */, fetch_an_event, NULL);
 }
 
+// If we could ask for art events from art, this would be the entry point to
+// the program.  However, art only allows access to the art events through its
+// own event loop, so we have to read events in that loop, then run the GTK
+// event loop for a while, then break out of that and go back to art's event
+// loop to get more events, etc.  Each time, we return here.
+//
+// If there are no more events to read from art, have_read_all will be true
+// and we will know that we should stay in the GTK event loop.
 void realmain(const bool have_read_all)
 {
   if(have_read_all) ghave_read_all = true;
@@ -763,14 +771,12 @@ void realmain(const bool have_read_all)
     first = false;
     setup();
   }
+  else if(prefetching){
+    set_eventn_status0();
+  }
   else{
-    if(prefetching){
-      set_eventn_status0();
-    }
-    else{
-      get_event(1);
-      g_timeout_add(0, draw_event_from_timer, NULL);
-    }
+    get_event(1);
+    g_timeout_add(0, draw_event_from_timer, NULL);
   }
   gtk_main();
 }
