@@ -42,7 +42,7 @@ static int active_plane = -1, active_cell = -1;
 // Would that be better?
 //
 // XXX Still a bug, probably related to the mouseover, that makes the
-// animation run multiple times somtimes.
+// animation run multiple times sometimes.
 static bool animate = false;
 static bool cumulative_animation = true;
 static bool free_running = false;
