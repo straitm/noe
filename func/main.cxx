@@ -664,11 +664,22 @@ static void toggle_cum_ani(GtkWidget * w,
   if(cumulative_animation) switch_to_cumulative = true;
 }
 
-static void toggle_animate(__attribute__((unused)) GtkWidget * w, gpointer dt)
+static gboolean scheduled_draw(__attribute__((unused)) gpointer dt)
+{
+  draw_event(edarea, NULL, NULL);
+  return FALSE;
+}
+
+static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
   sub_toggle_mouseover();
-  draw_event((GtkWidget *)dt, NULL, NULL);
+  // Schedule the draw for the next time the main event loop runs instead of
+  // drawing immediately because otherwise, the checkbox doesn't appear checked
+  // until the user moves the mouse off of it.  I don't really understand how
+  // the problem comes about, but this fixes it.  It is not a problem for
+  // any of the other checkboxes.
+  g_timeout_add(0, scheduled_draw, w);
 }
 
 static void close_window()
