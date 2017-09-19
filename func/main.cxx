@@ -405,7 +405,7 @@ static void set_eventn_status1()
 static void set_eventn_status2()
 {
   if(active_plane < 0 || active_cell < 0){
-    set_status(2, "%souseover a cell for more information",
+    set_status(2, "%souse over a cell for more information",
       animate || free_running?"Turn off animation and free running and m":"M");
     return;
   }
@@ -414,13 +414,21 @@ static void set_eventn_status2()
   int pos = snprintf(status2, MAXSTATUS-1, "Plane %d, cell %d: ",
                      active_plane, active_cell);
 
+  // TODO: display calibrated energies
   std::vector<hit> & THEhits = theevents[gevi].hits;
-  for(unsigned int i = 0; i < THEhits.size(); i++)
+  bool needseparator = false;
+  for(unsigned int i = 0; i < THEhits.size(); i++){
     if(THEhits[i].plane == active_plane &&
-       THEhits[i].cell  == active_cell)
+       THEhits[i].cell  == active_cell){
       pos += snprintf(status2+pos, MAXSTATUS-1-pos,
-                      "TDC = %d, ADC = %d; ",
-                      THEhits[i].tdc, THEhits[i].adc);
+          "%sTDC = %s%d (%s%.3f us), ADC = %s%d",
+          needseparator?"; ":"",
+          BOTANY_BAY_OH_INT(THEhits[i].tdc),
+          BOTANY_BAY_OH_NO (THEhits[i].tdc/64.),
+          BOTANY_BAY_OH_INT(THEhits[i].adc));
+      needseparator = true;
+    }
+  }
   set_status(2, status2);
 }
 
