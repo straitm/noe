@@ -442,6 +442,27 @@ static void set_eventn_status()
   set_eventn_status2();
 }
 
+// Unhighlight the cell that is no longer being mousedover, indicated by
+// oldactive_plane/cell, and highlight the new one.  Do this instead of a full
+// redraw of edarea, which is expensive and causes very noticable lag for the
+// FD. This should only be called when we are not animating, since it does not
+// check the hit times (although this would be a straightforward extension).
+static void change_highlighted_cell(GtkWidget * widg,
+                                    const int oldactive_plane,
+                                    const int oldactive_cell)
+{
+  cairo_t * cr = gdk_cairo_create(widg->window);
+  cairo_set_line_width(cr, 1.0);
+  std::vector<hit> & THEhits = theevents[gevi].hits;
+  for(unsigned int i = 0; i < THEhits.size(); i++){
+    hit & thishit = THEhits[i];
+    if((thishit.plane == oldactive_plane && thishit.cell == oldactive_cell) ||
+       (thishit.plane ==    active_plane && thishit.cell ==    active_cell))
+      draw_hit(cr, thishit);
+  }
+  cairo_destroy(cr);
+}
+
 static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
                            __attribute__((unused)) gpointer data)
 {
@@ -616,11 +637,14 @@ static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
                            // that the user wants it anyway.
   if(theevents.empty()) return TRUE; // No coordinates in this case
 
+  const int oldactive_plane = active_plane;
+  const int oldactive_cell  = active_cell;
+
   active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
   active_cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
 
-  // XXX very heavyhanded
-  draw_event(edarea, NULL, NULL);
+  change_highlighted_cell(edarea, oldactive_plane, oldactive_cell);
+  set_eventn_status2();
 
   return TRUE;
 }
@@ -633,8 +657,8 @@ static void sub_toggle_mouseover()
   // With free running, we draw the current event many times and appear to be
   // stuck.
   if(free_running || animate){
-    g_signal_handler_disconnect(edarea, mouseover_handle);
-    active_plane = active_cell = -1;
+    if(mouseover_handle > 0) g_signal_handler_disconnect(edarea, mouseover_handle);
+    mouseover_handle = active_plane = active_cell = -1;
   }
   else{
     mouseover_handle =
