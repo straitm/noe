@@ -7,8 +7,39 @@
 
 static const int viewsep = 8; // vertical cell widths between x and y views
 
-// We're going to assume the ND until we see a hit that indicates it's FD
-static bool isfd = false;
+static const int MAXSTATUS = 1024;
+
+/* The events and the current event */
+extern std::vector<nevent> theevents;
+static int gevi = 0;
+
+/* GTK objects */
+static GtkWidget * statbox[3];
+static GtkTextBuffer * stattext[3];
+static GtkWidget * edarea = NULL;
+static GtkWidget * freerun_checkbox = NULL;
+static gulong mouseover_handle = 0;
+
+/* Running flags */
+static bool ghave_read_all = false;
+static bool need_another_event = false;
+static bool prefetching = false;
+static bool cancel_draw = false;
+static bool switch_to_cumulative = false;
+static bool animating = false;
+static int currenttick = 0;
+static int active_plane = -1, active_cell = -1;
+
+/* Ticky boxes flags */
+// Must start false, because the first thing that happens is that we get two
+// expose events (I don't know why) and I don't want to handle an animated
+// expose when we haven't drawn yet at all.
+//
+// XXX Still a bug, probably related to the mouseover, that makes the
+// animation run multiple times
+static bool animate = false;
+static bool cumulative_animation = true;
+static bool free_running = false;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 static const int NDnplanes_perview = 8 * 12 + 11,
@@ -20,22 +51,21 @@ static const int FDnplanes_perview = 16 * 28,
 
 // Want the nearest small integer box that has an aspect ratio close to 3.36:1.
 // Options: 3:1, 2:7, 3:10, 4:13, 5:17, etc.
-static const int FDpixx = 3, FDpixy = 1;
-static const int NDpixx = 10, NDpixy = 3;
+static int pixx_from_pixy(const int x)
+{
+  return int(x*3.36 + 0.5);
+}
+
+static const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
+static const int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 static int nplanes_perview = NDnplanes_perview,
            first_mucatcher = NDfirst_mucatcher,
            ncells_perplane = NDncells_perplane;
-
-static int pixx = NDpixx, pixy = NDpixy;
-
 static int nplanes = 2*nplanes_perview;
+static int pixx = NDpixx, pixy = NDpixy;
 static int ybox, xboxnomu, yboxnomu, xbox;
-
-static GtkWidget * edarea = NULL;
-static GtkWidget * freerun_checkbox = NULL;
-static gulong mouseover_handle = 0;
 
 static void setboxes()
 {
@@ -55,6 +85,9 @@ static void setboxes()
                                 ybox*2 + viewsep*pixy);
 }
 
+// We're going to assume the ND until we see a hit that indicates it's FD
+static bool isfd = false;
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 static void setfd()
 {
@@ -72,37 +105,11 @@ static void setfd()
   setboxes();
 }
 
-extern std::vector<nevent> theevents;
-
-
-static GtkWidget * statbox[3];
-static GtkTextBuffer * stattext[3];
-
-static bool ghave_read_all = false;
-static bool need_another_event = false;
-static bool prefetching = false;
-static bool cancel_draw = false;
-static bool switch_to_cumulative = false;
-
-static bool animating = false;
-static int currenttick = 0;
-
-static int gevi = 0;
-
-// Must start false, because the first thing that happens is that we get two
-// expose events (I don't know why) and I don't want to handle an animated
-// expose when we haven't drawn yet at all.
-//
-// XXX Still a bug, probably related to the mouseover, that makes the
-// animation run multiple times
-static bool animate = false;
-
-static bool cumulative_animation = true;
-static bool free_running = false;
-
-static int active_plane = -1, active_cell = -1;
-
-static const int MAXSTATUS = 1024;
+// This hack allows us to get proper minus signs that look a lot better
+// than the hyphens that printf puts out.  I'm sure there's a better
+// way to do this.
+#define BOTANY_BAY_OH_NO(x) x < 0?"−":"", fabs(x)
+#define BOTANY_BAY_OH_INT(x) x < 0?"−":"", abs(x)
 
 /* Update the given status bar to the given text and also process all
  * window events.  */
@@ -373,18 +380,19 @@ static void set_eventn_status1()
 
   char status1[MAXSTATUS];
 
-  int pos = snprintf(status1, MAXSTATUS-1, "Ticks %'d through %'d.  ",
-             THEevent->mintick, THEevent->maxtick);
+  int pos = snprintf(status1, MAXSTATUS-1, "Ticks %s%'d through %'d.  ",
+             BOTANY_BAY_OH_INT(THEevent->mintick), THEevent->maxtick);
   if(!animate)
     pos += snprintf(status1+pos, MAXSTATUS-1-pos, "Showing all ticks");
   else if(cumulative_animation)
     pos += snprintf(status1+pos, MAXSTATUS-1-pos,
-                    "Showing ticks %d through %d (%.3f us)",
-                    THEevent->mintick, currenttick, currenttick/64.);
+      "Showing ticks %s%d through %s%d (%s%.3f us)",
+      BOTANY_BAY_OH_INT(THEevent->mintick), BOTANY_BAY_OH_INT(currenttick),
+      BOTANY_BAY_OH_NO(currenttick/64.));
   else
     pos += snprintf(status1+pos, MAXSTATUS-1-pos,
-                    "Showing tick %d (%.3f us)",
-                    currenttick, currenttick/64.);
+                    "Showing tick %s%d (%s%.3f us)",
+                    BOTANY_BAY_OH_INT(currenttick), BOTANY_BAY_OH_NO(currenttick/64.));
 
   set_status(1, status1);
 }
