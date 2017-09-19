@@ -701,10 +701,10 @@ static void setup()
   setboxes();
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
 
-  GtkWidget * next = gtk_button_new_with_label("Next Event");
+  GtkWidget * next = gtk_button_new_with_mnemonic("_Next Event");
   g_signal_connect(next, "clicked", G_CALLBACK(to_next), new bool(true));
 
-  GtkWidget * prev = gtk_button_new_with_label("Previous Event");
+  GtkWidget * prev = gtk_button_new_with_mnemonic("_Previous Event");
   g_signal_connect(prev, "clicked", G_CALLBACK(to_next), new bool(false));
 
   const int nrow = 5, ncol = 5;
