@@ -317,6 +317,23 @@ static int screen_to_cell(const int x, const int y)
   return closestcell;
 }
 
+static void draw_hit(cairo_t * cr, const hit & thishit)
+{
+  const int screenx = det_to_screen_x(thishit.plane),
+            screeny = det_to_screen_y(thishit.plane, thishit.cell);
+
+  float red, green, blue;
+
+  colorhit(thishit.adc, red, green, blue,
+           thishit.plane == active_plane && thishit.cell == active_cell);
+
+  cairo_set_source_rgb(cr, red, green, blue);
+
+  cairo_rectangle(cr, screenx+0.5, screeny+0.5,
+                      pixx-1,      pixy-1);
+  cairo_stroke(cr);
+}
+
 static void draw_hits(cairo_t * cr, const bool fullredraw)
 {
   cairo_set_line_width(cr, 1.0);
@@ -345,19 +362,7 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
       }
     }
 
-    const int screenx = det_to_screen_x(thishit.plane),
-              screeny = det_to_screen_y(thishit.plane, thishit.cell);
-
-    float red, green, blue;
-
-    colorhit(thishit.adc, red, green, blue,
-             thishit.plane == active_plane && thishit.cell == active_cell);
-
-    cairo_set_source_rgb(cr, red, green, blue);
-
-    cairo_rectangle(cr, screenx+0.5, screeny+0.5,
-                        pixx-1,      pixy-1);
-    cairo_stroke(cr);
+    draw_hit(cr, thishit);
   }
 }
 
