@@ -699,7 +699,9 @@ static void getuserevent()
 
   bool forward = userevent > (int)theevents[gevi].nevent;
   while(userevent != (int)theevents[gevi].nevent)
-    get_event(forward?1:-1);
+    // Don't go through get_event because we do *not* want to try
+    // getting more events from the file
+    gevi += (forward?1:-1);
 
   prepare_to_swich_events();
   draw_event(edarea, NULL, NULL);
