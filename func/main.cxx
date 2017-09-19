@@ -391,12 +391,12 @@ static void set_eventn_status1()
     pos += snprintf(status1+pos, MAXSTATUS-1-pos, "Showing all ticks");
   else if(cumulative_animation)
     pos += snprintf(status1+pos, MAXSTATUS-1-pos,
-      "Showing ticks %s%d through %s%d (%s%.3f us)",
+      "Showing ticks %s%d through %s%d (%s%.3f μs)",
       BOTANY_BAY_OH_INT(THEevent->mintick), BOTANY_BAY_OH_INT(currenttick),
       BOTANY_BAY_OH_NO(currenttick/64.));
   else
     pos += snprintf(status1+pos, MAXSTATUS-1-pos,
-                    "Showing tick %s%d (%s%.3f us)",
+                    "Showing tick %s%d (%s%.3f μs)",
                     BOTANY_BAY_OH_INT(currenttick), BOTANY_BAY_OH_NO(currenttick/64.));
 
   set_status(1, status1);
@@ -421,7 +421,7 @@ static void set_eventn_status2()
     if(THEhits[i].plane == active_plane &&
        THEhits[i].cell  == active_cell){
       pos += snprintf(status2+pos, MAXSTATUS-1-pos,
-          "%sTDC = %s%d (%s%.3f us), ADC = %s%d",
+          "%sTDC = %s%d (%s%.3f μs), ADC = %s%d",
           needseparator?"; ":"",
           BOTANY_BAY_OH_INT(THEhits[i].tdc),
           BOTANY_BAY_OH_NO (THEhits[i].tdc/64.),
@@ -590,6 +590,7 @@ static void to_next(__attribute__((unused)) GtkWidget * widget,
                     gpointer data)
 {
   cancel_draw = true;
+  active_cell = active_plane = -1;
 
   const bool * const forward = (const bool * const)data;
   if(get_event((*forward)?1:-1))
