@@ -100,7 +100,12 @@ void noe::produce(art::Event& evt)
     ev.addhit(thehit);
   }
   theevents.push_back(ev);
-  realmain(false);
+
+  // Buffer 25 events before popping up the GUI so that the chance of getting
+  // stuck in some funny case while we are fetching more events is reduced.
+  // This takes about 1 second for far detector ddenergy events, which are
+  // about as heavy as they come.
+  if(theevents.size() >= 25) realmain(false);
 }
 
 DEFINE_ART_MODULE(noe);
