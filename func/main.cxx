@@ -14,7 +14,7 @@ extern std::vector<nevent> theevents;
 static int gevi = 0;
 
 /* GTK objects */
-static const int NSTATBOXES = 3;
+static const int NSTATBOXES = 4;
 static GtkWidget * statbox[NSTATBOXES];
 static GtkTextBuffer * stattext[NSTATBOXES];
 static GtkWidget * edarea = NULL;
@@ -22,6 +22,8 @@ static GtkWidget * animate_checkbox = NULL,
                  * cum_ani_checkbox = NULL,
                  * freerun_checkbox = NULL;
 static gulong mouseover_handle = 0;
+static GtkWidget * ueventbut = NULL;
+static GtkWidget * ueventbox = NULL;
 
 /* Running flags */
 static bool ghave_read_all = false;
@@ -335,41 +337,21 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
 
   cairo_set_source_rgb(cr, red, green, blue);
 
-  cairo_rectangle(cr, screenx+0.5, screeny+0.5,
-                      pixx-1,      pixy-1);
-  cairo_stroke(cr);
-}
-
-static void draw_hits(cairo_t * cr, const bool fullredraw)
-{
-  cairo_set_line_width(cr, 1.0);
-
-  nevent * THEevent = &theevents[gevi];
-
-  std::sort(THEevent->hits.begin(), THEevent->hits.end(), by_charge);
-
-  for(unsigned int i = 0; i < THEevent->hits.size(); i++){
-    hit & thishit = THEevent->hits[i];
-
-    // If we're not animating, we're just going to draw everything no matter
-    // what.  Otherwise, we need to know whether to draw just the new stuff
-    // or everthing up to the current tick.
-    if(animate){
-      if(cumulative_animation){
-        if(fullredraw){
-          if(THEevent->hits[i].tdc > currenttick) continue;
-        }
-        else{
-          if(THEevent->hits[i].tdc != currenttick) continue;
-        }
-      }
-      else if(abs(THEevent->hits[i].tdc - currenttick) > 8){
-        continue;
-      }
-    }
-
-    draw_hit(cr, thishit);
+  // This is the only part of drawing an event that takes any time
+  // I have measured drawing a line to be twice as fast as drawing a
+  // rectangle of width 1, so it is totally worth it to have a special
+  // case.  This really helps with drawing big events.
+  //
+  // TODO what about pixy == 2?  Check if two lines is faster than 1 rectangle.
+  if(pixy == 1){
+    cairo_move_to(cr, screenx,      screeny+0.5);
+    cairo_line_to(cr, screenx+pixx, screeny+0.5);
   }
+  else{
+    cairo_rectangle(cr, screenx+0.5, screeny+0.5,
+                        pixx-1,      pixy-1);
+  }
+  cairo_stroke(cr);
 }
 
 static void set_eventn_status0()
@@ -438,6 +420,11 @@ static void set_eventn_status2()
   set_status(2, status2);
 }
 
+static void set_eventn_status2alt(const int nhit, const int tothits)
+{
+  set_status(2, "Processing big event, %d/%d hits", nhit, tothits);
+}
+
 static void set_eventn_status()
 {
   set_eventn_status0();
@@ -446,6 +433,43 @@ static void set_eventn_status()
 
   set_eventn_status1();
   set_eventn_status2();
+}
+
+static void draw_hits(cairo_t * cr, const bool fullredraw)
+{
+  cairo_set_line_width(cr, 1.0);
+
+  std::vector<hit> & THEhits = theevents[gevi].hits;
+
+  std::sort(THEhits.begin(), THEhits.end(), by_charge);
+
+  const bool bigevent = THEhits.size() > 50000;
+
+  for(unsigned int i = 0; i < THEhits.size(); i++){
+    const hit & thishit = THEhits[i];
+
+    // If we're not animating, we're just going to draw everything no matter
+    // what.  Otherwise, we need to know whether to draw just the new stuff
+    // or everthing up to the current tick.
+    if(animate){
+      if(cumulative_animation){
+        if(fullredraw){
+          if(thishit.tdc > currenttick) continue;
+        }
+        else{
+          if(thishit.tdc != currenttick) continue;
+        }
+      }
+      else if(abs(thishit.tdc - currenttick) > 8){
+        continue;
+      }
+    }
+    else if(bigevent && i%50000 == 0){
+      set_eventn_status2alt(i, THEhits.size());
+    }
+
+    draw_hit(cr, thishit);
+  }
 }
 
 // Unhighlight the cell that is no longer being mousedover, indicated by
@@ -524,6 +548,10 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
     }
   }
 
+  // Set again at the end in case we were displaying a status bar
+  if(!cancel_draw)
+    set_eventn_status();
+
   // If we are moving to a new detector event, make sure we don't keep trying
   // to draw this detector event.  However, if we're here because of an X
   // expose event, we do want to keep going.
@@ -587,13 +615,18 @@ fetch_an_event(__attribute__((unused)) gpointer data)
   return TRUE;
 }
 
+// Why are you always preparing?  You're always preparing! Just go!
+static void prepare_to_swich_events()
+{
+  cancel_draw = true;
+  active_cell = active_plane = -1;
+}
+
 /** Display the next or previous event. */
 static void to_next(__attribute__((unused)) GtkWidget * widget,
                     gpointer data)
 {
-  cancel_draw = true;
-  active_cell = active_plane = -1;
-
+  prepare_to_swich_events();
   const bool * const forward = (const bool * const)data;
   if(get_event((*forward)?1:-1))
     draw_event(edarea, NULL, NULL);
@@ -612,6 +645,59 @@ static gboolean to_next_free_run(__attribute__((unused)) gpointer data)
     free_running = false;
   }
   return free_running && !atend;
+}
+
+// Returns true if the list of events we have *now* has an event with the given
+// number. No assumptions are made about the ordering of event numbers, although
+// I'm not sure if it's possible for them to be non-increasing in the current
+// art design.
+static bool have_event_by_number(const unsigned int n)
+{
+  for(unsigned int i = 0; i < theevents.size(); i++)
+    if(theevents[i].nevent == n)
+      return true;
+  return false;
+}
+
+static gboolean clear_error_message(__attribute__((unused)) gpointer dt)
+{
+  set_status(3, "");
+  return FALSE;
+}
+
+// Get a user entered event number from the text entry widget
+static void getuserevent()
+{
+  errno = 0;
+  char * endptr;
+  const int userevent =
+    strtol(gtk_entry_get_text(GTK_ENTRY(ueventbox)), &endptr, 10);
+
+  clear_error_message(NULL);
+
+  if((errno == ERANGE && (userevent == INT_MAX || userevent == INT_MIN))
+     || (errno != 0 && userevent == 0)
+     || endptr == optarg || *endptr != '\0'
+     || !have_event_by_number(userevent)){
+    set_status(3, "Entered event invalid or not available. %sI have "
+               "events %d through %d%s",
+               ghave_read_all?"":"Currently ",
+               theevents[0].nevent,
+               theevents[theevents.size()-1].nevent,
+               theevents[theevents.size()-1].nevent-theevents[0].nevent
+               == theevents.size()-1?"":" (not consecutive)");
+    g_timeout_add(8e3, clear_error_message, NULL);
+    return;
+  }
+
+  if(userevent == (int)theevents[gevi].nevent) return;
+
+  bool forward = userevent > (int)theevents[gevi].nevent;
+  while(userevent != (int)theevents[gevi].nevent)
+    get_event(forward?1:-1);
+
+  prepare_to_swich_events();
+  draw_event(edarea, NULL, NULL);
 }
 
 static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
@@ -725,7 +811,16 @@ static void setup()
   g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani), edarea);
   g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun), edarea);
 
-  const int nrow = 2+NSTATBOXES, ncol = 5;
+  ueventbox = gtk_entry_new();
+  gtk_entry_set_max_length(GTK_ENTRY(ueventbox), 20);//length of a int64
+  gtk_entry_set_width_chars(GTK_ENTRY(ueventbox), 10);
+  g_signal_connect(ueventbox, "activate", G_CALLBACK(getuserevent), NULL);
+
+  ueventbut = gtk_button_new_with_mnemonic("_Go to event");
+  g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
+
+
+  const int nrow = 2+NSTATBOXES, ncol = 7;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
   gtk_table_attach_defaults(GTK_TABLE(tab), prev,             0, 1, 0, 1);
@@ -733,6 +828,8 @@ static void setup()
   gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, 2, 3, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, 3, 4, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, 4, 5, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbox,        5, 6, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbut,        6, 7, 0, 1);
   for(int i = 0; i < NSTATBOXES; i++){
     statbox[i]  = gtk_text_view_new();
     stattext[i] = gtk_text_buffer_new(0);
@@ -740,7 +837,7 @@ static void setup()
     gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 1+i, 2+i);
   }
-  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 4, nrow);
+  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 1+NSTATBOXES, nrow);
 
   // This isn't the size I want, but along with requesting the size of the
   // edarea widget, it has the desired effect, at least more or less.
@@ -750,6 +847,16 @@ static void setup()
 
   get_event(0);
   draw_event(edarea, NULL, NULL);
+
+  // This is a hack that gets this button drawn fully. It seems that the window
+  // initially getting set to the size of the ND and then resized to the size
+  // of the FD fails to have the expected effect and the button(s) outside the
+  // original area don't get redrawn. Maybe this is is an xmonad-only problem?
+  // This is a case of a window resizing itself, and maybe window managers are
+  // supposed to send an expose event in this case, but xmonad doesn't. Or maybe
+  // they aren't supposed to according to the spec, but all the other ones do...
+  // In any case, this forces a redraw for the button(s) I know are affected.
+  gtk_widget_queue_draw(ueventbut);
 
   if(!ghave_read_all)
     g_timeout_add(20 /* ms */, fetch_an_event, NULL);
