@@ -341,11 +341,16 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   // I have measured drawing a line to be twice as fast as drawing a
   // rectangle of width 1, so it is totally worth it to have a special
   // case.  This really helps with drawing big events.
-  //
-  // TODO what about pixy == 2?  Check if two lines is faster than 1 rectangle.
   if(pixy == 1){
     cairo_move_to(cr, screenx,      screeny+0.5);
     cairo_line_to(cr, screenx+pixx, screeny+0.5);
+  }
+  // This is a smaller gain, but it is definitely faster by about 10%.
+  else if(pixy == 2){
+    cairo_move_to(cr, screenx,      screeny+0.5);
+    cairo_line_to(cr, screenx+pixx, screeny+0.5);
+    cairo_move_to(cr, screenx,      screeny+1.5);
+    cairo_line_to(cr, screenx+pixx, screeny+1.5);
   }
   else{
     cairo_rectangle(cr, screenx+0.5, screeny+0.5,
