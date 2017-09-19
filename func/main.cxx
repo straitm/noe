@@ -535,7 +535,7 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
   return FALSE;
 }
 
-// Used with g_timeout_add() to get an event drawn after re-entering the
+// Used, e.g., with g_timeout_add() to get an event drawn after re-entering the
 // GTK main loop.
 static gboolean draw_event_from_timer(gpointer data)
 {
@@ -670,12 +670,6 @@ static void toggle_cum_ani(GtkWidget * w,
   if(cumulative_animation) switch_to_cumulative = true;
 }
 
-static gboolean scheduled_draw(__attribute__((unused)) gpointer dt)
-{
-  draw_event(edarea, NULL, NULL);
-  return FALSE;
-}
-
 static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
@@ -685,7 +679,7 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
   // until the user moves the mouse off of it.  I don't really understand how
   // the problem comes about, but this fixes it.  It is not a problem for
   // any of the other checkboxes.
-  g_timeout_add(0, scheduled_draw, w);
+  g_timeout_add(0, draw_event_from_timer, w);
 }
 
 static void close_window()
