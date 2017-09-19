@@ -853,15 +853,14 @@ static void setup()
   get_event(0);
   draw_event(edarea, NULL, NULL);
 
-  // This is a hack that gets this button drawn fully. It seems that the window
+  // This is a hack that gets all objects drawn fully. It seems that the window
   // initially getting set to the size of the ND and then resized to the size
-  // of the FD fails to have the expected effect and the button(s) outside the
+  // of the FD fails to have the expected effect and the objects outside the
   // original area don't get redrawn. Maybe this is is an xmonad-only problem?
   // This is a case of a window resizing itself, and maybe window managers are
   // supposed to send an expose event in this case, but xmonad doesn't. Or maybe
   // they aren't supposed to according to the spec, but all the other ones do...
-  // In any case, this forces a redraw for the button(s) I know are affected.
-  gtk_widget_queue_draw(ueventbut);
+  gtk_widget_queue_draw(win);
 
   if(!ghave_read_all)
     g_timeout_add(20 /* ms */, fetch_an_event, NULL);
