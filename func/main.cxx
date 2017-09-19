@@ -537,10 +537,6 @@ static gboolean draw_event_from_timer(gpointer data)
   return FALSE; // don't call me again
 }
 
-struct butpair{
-  GtkWidget * next, * prev;
-};
-
 // Return true if the event is ready to be drawn.  Otherwise, we will have
 // to fetch it and call draw_event() later.
 static bool get_event(const int change)
@@ -610,23 +606,6 @@ static gboolean to_next_free_run(__attribute__((unused)) gpointer data)
     free_running = false;
   }
   return free_running && !atend;
-}
-
-static butpair mkbutton(char * label)
-{
-  struct butpair thepair;
-  static char labelbuf[1024];
-
-  snprintf(labelbuf, 1023, "Next %s", label);
-  thepair.next = gtk_button_new_with_label(labelbuf);
-  g_signal_connect(thepair.next, "clicked", G_CALLBACK(to_next),
-                   new bool(true));
-
-  snprintf(labelbuf, 1023, "Previous %s", label);
-  thepair.prev = gtk_button_new_with_label(labelbuf);
-  g_signal_connect(thepair.prev, "clicked", G_CALLBACK(to_next),
-                  new bool(false));
-  return thepair;
 }
 
 static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
@@ -711,7 +690,11 @@ static void setup()
   setboxes();
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
 
-  butpair npbuts = mkbutton((char *)"Event");
+  GtkWidget * next = gtk_button_new_with_label("Next Event");
+  g_signal_connect(next, "clicked", G_CALLBACK(to_next), new bool(true));
+
+  GtkWidget * prev = gtk_button_new_with_label("Previous Event");
+  g_signal_connect(prev, "clicked", G_CALLBACK(to_next), new bool(false));
 
   const int nrow = 5, ncol = 5;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
@@ -737,8 +720,8 @@ static void setup()
   g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani), edarea);
   g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun), edarea);
 
-  gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.prev,      0, 1, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), npbuts.next,      1, 2, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), prev,             0, 1, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), next,             1, 2, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, 2, 3, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, 3, 4, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, 4, 5, 0, 1);
