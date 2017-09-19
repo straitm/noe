@@ -18,7 +18,9 @@ static const int NSTATBOXES = 3;
 static GtkWidget * statbox[NSTATBOXES];
 static GtkTextBuffer * stattext[NSTATBOXES];
 static GtkWidget * edarea = NULL;
-static GtkWidget * freerun_checkbox = NULL;
+static GtkWidget * animate_checkbox = NULL,
+                 * cum_ani_checkbox = NULL,
+                 * freerun_checkbox = NULL;
 static gulong mouseover_handle = 0;
 
 /* Running flags */
@@ -32,12 +34,15 @@ static int currenttick = 0;
 static int active_plane = -1, active_cell = -1;
 
 /* Ticky boxes flags */
-// Must start false, because the first thing that happens is that we get two
-// expose events (I don't know why) and I don't want to handle an animated
-// expose when we haven't drawn yet at all.
+// Animate must start false, because the first thing that happens is that we
+// get two expose events (I don't know why) and I don't want to handle an
+// animated expose when we haven't drawn yet at all.
+//
+// Could eliminate these bools and always consult GTK_TOGGLE_BUTTON::active.
+// Would that be better?
 //
 // XXX Still a bug, probably related to the mouseover, that makes the
-// animation run multiple times
+// animation run multiple times somtimes.
 static bool animate = false;
 static bool cumulative_animation = true;
 static bool free_running = false;
@@ -712,14 +717,16 @@ static void setup()
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
-  GtkWidget * animate_checkbox =
-    gtk_check_button_new_with_mnemonic("_Animate");
-  GtkWidget * cum_ani_checkbox =
-    gtk_check_button_new_with_mnemonic("_Cumulative animation");
+  animate_checkbox = gtk_check_button_new_with_mnemonic("_Animate");
+  cum_ani_checkbox = gtk_check_button_new_with_mnemonic("_Cumulative animation");
+  freerun_checkbox = gtk_check_button_new_with_mnemonic("_Free running");
+
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(animate_checkbox),
+                               animate);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cum_ani_checkbox),
                                cumulative_animation);
-  freerun_checkbox =
-    gtk_check_button_new_with_mnemonic("_Free running");
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox),
+                               free_running);
 
   for(int i = 0; i < NSTATBOXES; i++){
     statbox[i]  = gtk_text_view_new();
