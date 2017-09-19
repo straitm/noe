@@ -702,20 +702,19 @@ static void setup()
                        "NOE: New nOva Event viewer");
   g_signal_connect(win, "delete-event", G_CALLBACK(close_window), 0);
 
-
   edarea = gtk_drawing_area_new();
   setboxes();
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
+  mouseover_handle =
+    g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
+  gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
+                                | GDK_POINTER_MOTION_MASK);
 
   GtkWidget * next = gtk_button_new_with_mnemonic("_Next Event");
   g_signal_connect(next, "clicked", G_CALLBACK(to_next), new bool(true));
 
   GtkWidget * prev = gtk_button_new_with_mnemonic("_Previous Event");
   g_signal_connect(prev, "clicked", G_CALLBACK(to_next), new bool(false));
-
-  const int nrow = 2+NSTATBOXES, ncol = 5;
-  GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
-  gtk_container_add(GTK_CONTAINER(win), tab);
 
   animate_checkbox = gtk_check_button_new_with_mnemonic("_Animate");
   cum_ani_checkbox = gtk_check_button_new_with_mnemonic("_Cumulative animation");
@@ -728,29 +727,26 @@ static void setup()
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox),
                                free_running);
 
-  for(int i = 0; i < NSTATBOXES; i++){
-    statbox[i]  = gtk_text_view_new();
-    stattext[i] = gtk_text_buffer_new(0);
-    gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
-    gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
-  }
-
   g_signal_connect(animate_checkbox, "toggled", G_CALLBACK(toggle_animate), edarea);
   g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani), edarea);
   g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun), edarea);
 
+  const int nrow = 2+NSTATBOXES, ncol = 5;
+  GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
+  gtk_container_add(GTK_CONTAINER(win), tab);
   gtk_table_attach_defaults(GTK_TABLE(tab), prev,             0, 1, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), next,             1, 2, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, 2, 3, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, 3, 4, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, 4, 5, 0, 1);
-  for(int i = 0; i < NSTATBOXES; i++)
+  for(int i = 0; i < NSTATBOXES; i++){
+    statbox[i]  = gtk_text_view_new();
+    stattext[i] = gtk_text_buffer_new(0);
+    gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 1+i, 2+i);
+  }
   gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 4, nrow);
-  mouseover_handle =
-    g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
-  gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
-                                | GDK_POINTER_MOTION_MASK);
 
   // This isn't the size I want, but along with requesting the size of the
   // edarea widget, it has the desired effect, at least more or less.
