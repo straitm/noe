@@ -14,8 +14,9 @@ extern std::vector<nevent> theevents;
 static int gevi = 0;
 
 /* GTK objects */
-static GtkWidget * statbox[3];
-static GtkTextBuffer * stattext[3];
+static const int NSTATBOXES = 3;
+static GtkWidget * statbox[NSTATBOXES];
+static GtkTextBuffer * stattext[NSTATBOXES];
 static GtkWidget * edarea = NULL;
 static GtkWidget * freerun_checkbox = NULL;
 static gulong mouseover_handle = 0;
@@ -707,7 +708,7 @@ static void setup()
   GtkWidget * prev = gtk_button_new_with_mnemonic("_Previous Event");
   g_signal_connect(prev, "clicked", G_CALLBACK(to_next), new bool(false));
 
-  const int nrow = 5, ncol = 5;
+  const int nrow = 2+NSTATBOXES, ncol = 5;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
@@ -720,7 +721,7 @@ static void setup()
   freerun_checkbox =
     gtk_check_button_new_with_mnemonic("_Free running");
 
-  for(int i = 0; i < 3; i++){
+  for(int i = 0; i < NSTATBOXES; i++){
     statbox[i]  = gtk_text_view_new();
     stattext[i] = gtk_text_buffer_new(0);
     gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
@@ -736,7 +737,7 @@ static void setup()
   gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, 2, 3, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, 3, 4, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, 4, 5, 0, 1);
-  for(int i = 0; i < 3; i++)
+  for(int i = 0; i < NSTATBOXES; i++)
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 1+i, 2+i);
   gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 4, nrow);
   mouseover_handle =
