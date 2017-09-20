@@ -48,6 +48,8 @@ static int active_plane = -1, active_cell = -1;
 static bool animate = false;
 static bool cumulative_animation = true;
 static bool free_running = false;
+static int freeruninterval = 100; // ms
+static gulong freeruntimeoutid = 0;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 static const int NDnplanes_perview = 8 * 12 + 11,
@@ -585,7 +587,7 @@ static bool get_event(const int change)
       gevi = theevents.size() - 1;
     }
     else{
-      // TODO make this work with abs(change) > 1
+      // TODO make this work with abs(change) > 1... actually, do we care?
       // XXX this is great except that if events happen while not
       // in the GTK loop, we get an assertion failure on the console.
       // Maybe it's harmless, or nearly harmless, in that we just lose
@@ -697,7 +699,7 @@ static void getuserevent()
 
   if(userevent == (int)theevents[gevi].nevent) return;
 
-  bool forward = userevent > (int)theevents[gevi].nevent;
+  const bool forward = userevent > (int)theevents[gevi].nevent;
   while(userevent != (int)theevents[gevi].nevent)
     // Don't go through get_event because we do *not* want to try
     // getting more events from the file
@@ -751,7 +753,7 @@ static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
   free_running = GTK_TOGGLE_BUTTON(w)->active;
   sub_toggle_mouseover();
   if(free_running)
-    g_timeout_add(100 /* ms */, to_next_free_run, NULL);
+    freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
 }
 
 static void toggle_cum_ani(GtkWidget * w,
@@ -774,6 +776,22 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
   // any of the other checkboxes.
   g_timeout_add(0, draw_event_from_timer, w);
 }
+
+static void adjustspeed(GtkWidget * wg,
+                        __attribute__((unused)) const gpointer dt)
+{
+  freeruninterval = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
+
+  if(!free_running) return;
+
+  // If we are animating and free running, we need to stop the current
+  // animation or else we will start drawing a new event in the middle
+  // of the current one when the new, unrelated, timer fires next.
+  cancel_draw = true;
+  if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
+  freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
+}
+
 
 static void close_window()
 {
@@ -818,6 +836,22 @@ static void setup()
   g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani), edarea);
   g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun), edarea);
 
+
+  GtkObject * const speedadj = gtk_adjustment_new
+    (freeruninterval, 1, 10000, 10, 100, 0);
+  g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
+
+  GtkWidget * const speedslider
+    = gtk_spin_button_new(GTK_ADJUSTMENT(speedadj), 10, 0);
+
+  GtkWidget * speedlabel = gtk_text_view_new();
+  GtkTextBuffer * speedlabeltext = gtk_text_buffer_new(0);
+  gtk_text_view_set_justification(GTK_TEXT_VIEW(speedlabel), GTK_JUSTIFY_CENTER);
+  const char * const speedlabelbuf = "Animation/Free run interval (ms)";
+  gtk_text_buffer_set_text(speedlabeltext, speedlabelbuf, strlen(speedlabelbuf));
+  gtk_text_view_set_buffer(GTK_TEXT_VIEW(speedlabel), speedlabeltext);
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(speedlabel), false);
+
   ueventbox = gtk_entry_new();
   gtk_entry_set_max_length(GTK_ENTRY(ueventbox), 20);//length of a int64
   gtk_entry_set_width_chars(GTK_ENTRY(ueventbox), 10);
@@ -827,7 +861,7 @@ static void setup()
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
 
-  const int nrow = 2+NSTATBOXES, ncol = 7;
+  const int nrow = 3+NSTATBOXES, ncol = 8;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
   gtk_table_attach_defaults(GTK_TABLE(tab), prev,             0, 1, 0, 1);
@@ -835,16 +869,33 @@ static void setup()
   gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, 2, 3, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, 3, 4, 0, 1);
   gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, 4, 5, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbox,        5, 6, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbut,        6, 7, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), speedslider,      5, 6, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbox,        6, 7, 0, 1);
+  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbut,        7, 8, 0, 1);
+
+  for(int i = 0; i < ncol; i++){
+    if(i == 5){
+      gtk_table_attach_defaults(GTK_TABLE(tab), speedlabel, i, i+1, 1, 2);
+    }
+    else{
+      // Have to put a blank text box in each table cell or else the
+      // background color is inconsistent.
+      GtkWidget * blanklabel = gtk_text_view_new();
+      gtk_text_view_set_editable(GTK_TEXT_VIEW(blanklabel), false);
+      gtk_table_attach_defaults(GTK_TABLE(tab), blanklabel, i, i+1, 1, 2);
+    }
+  }
+
   for(int i = 0; i < NSTATBOXES; i++){
     statbox[i]  = gtk_text_view_new();
     stattext[i] = gtk_text_buffer_new(0);
     gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
-    gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 1+i, 2+i);
+    gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i);
   }
-  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 1+NSTATBOXES, nrow);
+  gtk_table_attach_defaults(GTK_TABLE(tab), speedlabel,       5, 6, 1, 2);
+
+  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 2+NSTATBOXES, nrow);
 
   // This isn't the size I want, but along with requesting the size of the
   // edarea widget, it has the desired effect, at least more or less.
