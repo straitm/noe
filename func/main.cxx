@@ -523,8 +523,6 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
   for(currenttick = thisfirsttick; currenttick <= thislasttick; currenttick+=4){
 
-    set_eventn_status();
-
     cairo_t * cr = gdk_cairo_create(widg->window);
     cairo_push_group(cr);
 
@@ -541,13 +539,15 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
     cairo_paint(cr);
     cairo_destroy(cr);
 
+    // Check if we have started drawing another event while
+    // still in here.  If so, don't keep drawing this one.
+    const int thisdrawn = drawn;
+    set_eventn_status();
+
     if(animate && currenttick != THEevent->maxtick){
-      usleep(15e3);
+      usleep(freeruninterval * 10);
       animating = true;
 
-      // Check if we have started drawing another event while
-      // still in here.  If so, don't keep drawing this one.
-      const int thisdrawn = drawn;
       while(g_main_context_iteration(NULL, FALSE));
       if(cancel_draw || drawn != thisdrawn) break;
     }
