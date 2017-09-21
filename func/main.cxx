@@ -621,9 +621,9 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
     if(animate && currenttick != THEevent->maxtick){
       if(freeruninterval > 0){
-        // The delay between animation frames is 1/100 the delay between free
+        // The delay between animation frames is 3/100 the delay between free
         // running events, but measured in microseconds instead of milliseconds.
-        const int animationmult = 10;
+        const int animationmult = 30;
 
         // To keep the application responsive, sleep in 50ms chunks.  This is
         // kinda dumb.  GTK doesn't seem to have a way of saying "go back to
@@ -671,9 +671,9 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
 // Used, e.g., with g_timeout_add() to get an event drawn after re-entering the
 // GTK main loop.
-static gboolean draw_event_from_timer(gpointer data)
+static gboolean draw_event_from_timer(__attribute__((unused)) gpointer data)
 {
-  draw_event(edarea, NULL, data);
+  draw_event(edarea, NULL, NULL);
   return FALSE; // don't call me again
 }
 
@@ -791,13 +791,14 @@ static void getuserevent()
      || (errno != 0 && userevent == 0)
      || endptr == optarg || *endptr != '\0'
      || !have_event_by_number(userevent)){
-    set_status(3, "Entered event invalid or not available. %sI have "
-               "events %d through %d%s",
-               ghave_read_all?"":"Currently ",
-               theevents[0].nevent,
-               theevents[theevents.size()-1].nevent,
-               theevents[theevents.size()-1].nevent-theevents[0].nevent
-               == theevents.size()-1?"":" (not consecutive)");
+    if(!theevents.empty())
+      set_status(3, "Entered event invalid or not available. %sI have "
+                 "events %d through %d%s",
+                 ghave_read_all?"":"Currently ",
+                 theevents[0].nevent,
+                 theevents[theevents.size()-1].nevent,
+                 theevents[theevents.size()-1].nevent-theevents[0].nevent
+                 == theevents.size()-1?"":" (not consecutive)");
     g_timeout_add(8e3, clear_error_message, NULL);
     return;
   }
@@ -847,23 +848,33 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
   // until the user moves the mouse off of it.  I don't really understand how
   // the problem comes about, but this fixes it.  It is not a problem for
   // any of the other checkboxes.
-  g_timeout_add(0, draw_event_from_timer, w);
+  g_timeout_add(0, draw_event_from_timer, NULL);
+}
+
+static void restart_animation(__attribute__((unused)) GtkWidget * w,
+                              __attribute__((unused)) gpointer d)
+{
+  // Assume that if the user wants the animation restarted, then the
+  // user wants animation.
+  animate = true;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(animate_checkbox), TRUE);
+  g_timeout_add(0, draw_event_from_timer, NULL);
 }
 
 // Convert the abstract "speed" number from the user into a delay.
 static void set_freeruninterval(const int speednum)
 {
   switch(speednum < 1?1:speednum > 11?11:speednum){
-    case  1: freeruninterval = (int)pow(10, 5.5); break;
-    case  2: freeruninterval = (int)pow(10, 5.0); break;
-    case  3: freeruninterval = (int)pow(10, 4.5); break;
-    case  4: freeruninterval = (int)pow(10, 4.0); break;
-    case  5: freeruninterval = (int)pow(10, 3.5); break;
-    case  6: freeruninterval = (int)pow(10, 3.0); break;
-    case  7: freeruninterval = (int)pow(10, 2.5); break;
-    case  8: freeruninterval = (int)pow(10, 2.0); break;
-    case  9: freeruninterval = (int)pow(10, 1.5); break;
-    case 10: freeruninterval = (int)pow(10, 1.0); break;
+    case  1: freeruninterval = (int)pow(10, 5.0); break;
+    case  2: freeruninterval = (int)pow(10, 4.5); break;
+    case  3: freeruninterval = (int)pow(10, 4.0); break;
+    case  4: freeruninterval = (int)pow(10, 3.5); break;
+    case  5: freeruninterval = (int)pow(10, 3.0); break;
+    case  6: freeruninterval = (int)pow(10, 2.5); break;
+    case  7: freeruninterval = (int)pow(10, 2.0); break;
+    case  8: freeruninterval = (int)pow(10, 1.5); break;
+    case  9: freeruninterval = (int)pow(10, 1.0); break;
+    case 10: freeruninterval = (int)pow(10, 0.5); break;
     case 11: freeruninterval = 0; break;
   }
 }
@@ -942,6 +953,8 @@ static void setup()
   g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani),edarea);
   g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun),edarea);
 
+  GtkWidget * re_an_button = gtk_button_new_with_mnemonic("_Restart animation");
+  g_signal_connect(re_an_button, "clicked", G_CALLBACK(restart_animation), NULL);
 
   const int initialspeednum = 5;
   GtkObject * const speedadj = gtk_adjustment_new
@@ -969,20 +982,25 @@ static void setup()
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
 
-  const int nrow = 3+NSTATBOXES, ncol = 8;
+  const int nrow = 3+NSTATBOXES, ncol = 9;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
-  gtk_table_attach_defaults(GTK_TABLE(tab), prev,             0, 1, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), next,             1, 2, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, 2, 3, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, 3, 4, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, 4, 5, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), speedslider,      5, 6, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbox,        6, 7, 0, 1);
-  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbut,        7, 8, 0, 1);
+
+  {
+  int c = 0;
+  gtk_table_attach_defaults(GTK_TABLE(tab), prev,             c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), next,             c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), re_an_button,     c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), speedslider,      c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbox,        c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbut,        c, c+1, 0, 1); c++;
+  }
 
   for(int i = 0; i < ncol; i++){
-    if(i == 5){
+    if(i == 6){
       gtk_table_attach_defaults(GTK_TABLE(tab), speedlabel, i, i+1, 1, 2);
     }
     else{
