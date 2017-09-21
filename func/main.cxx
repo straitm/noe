@@ -1,3 +1,31 @@
+/*
+Main file for NOE, the New nOva Event display. This isn't the entry
+point (see comments at realmain()), but is where nearly everything
+happens.
+
+Author: Matthew Strait
+Begun: Sept 2017
+
+======================================================================
+
+Code style:
+
+* This is mostly C with use of STL containers. I'm not a big fan of
+  the infinitely complex language that C++ has become.
+
+* There is a fair amount of global state. Mostly it represents what's
+  being displayed to the user, which is also global state of a sort.
+  You might consider this bad style anyway, but I think it is under
+  control and prevents having to build up too much abstraction that
+  makes the code difficult to understand.
+
+* Tradition dictates that code be under 80 or perhaps 72 columns. I
+  like tradition, plus I like splitting my screen into two equal width
+  terminals, which leaves 83 columns after 5 columns are used for line
+  numbers. So this code will be mostly within 80 columns and certainly
+  within 83.
+*/
+
 #include <gtk/gtk.h>
 #include <stdio.h>
 #include <vector>
@@ -7,6 +35,7 @@
 
 static const int viewsep = 8; // vertical cell widths between x and y views
 
+// Maximum length of any string being printed to a status bar
 static const int MAXSTATUS = 1024;
 
 // Let's see.  I believe both detectors read out in increments of 4 TDC units,
@@ -14,7 +43,7 @@ static const int MAXSTATUS = 1024;
 // FD can only report every 4 * 2^N TDC units, where I think N = 2.
 static const int TDCSTEP = 4;
 
-/* The events and the current event */
+/* The events and the current event index in the vector */
 extern std::vector<nevent> theevents;
 static int gevi = 0;
 
@@ -81,6 +110,8 @@ static int nplanes = 2*nplanes_perview;
 static int pixx = NDpixx, pixy = NDpixy;
 static int ybox, xboxnomu, yboxnomu, xbox;
 
+// Calculate the size of the bounding boxes for the detector's x and y
+// views, plus the muon catcher cutaway.  Resize the window to match.
 static void setboxes()
 {
   ybox = ncells_perplane*pixy + pixy/2 /* cell stagger */,
@@ -125,8 +156,8 @@ static void setfd()
 #define BOTANY_BAY_OH_NO(x) x < 0?"−":"", fabs(x)
 #define BOTANY_BAY_OH_INT(x) x < 0?"−":"", abs(x)
 
-/* Update the given status bar to the given text and also process all
- * window events.  */
+// Update the given status bar to the given text and also process all
+// window events.
 static void set_status(const int boxn, const char * format, ...)
 {
   va_list ap;
@@ -135,13 +166,15 @@ static void set_status(const int boxn, const char * format, ...)
   vsnprintf(buf, MAXSTATUS-1, format, ap);
 
   gtk_text_buffer_set_text(stattext[boxn], buf, strlen(buf));
-  gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[boxn]),
-                           stattext[boxn]);
+  gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[boxn]), stattext[boxn]);
 
   // Makes performance much better for reasons I don't understand
   while(g_main_context_iteration(NULL, FALSE));
 }
 
+// Given a hit energy, set red, green and blue to the color we want to display
+// for the hit.  If "active" is true, set a brighter color.  This is intended
+// for when the user has moused over the cell.
 static void colorhit(const int32_t adc, float & red, float & green, float & blue,
                      const bool active)
 {
@@ -189,6 +222,7 @@ __attribute__((unused)) static bool by_time(const hit & a, const hit & b)
   return a.tdc < b.tdc;
 }
 
+// Blank the drawing area and draw the detector bounding boxes
 static void draw_background(cairo_t * cr)
 {
   cairo_set_source_rgb(cr, 0, 0, 0);
@@ -332,6 +366,8 @@ static int screen_to_cell(const int x, const int y)
   return closestcell;
 }
 
+// Draw a single hit to the screen, taking into account whether it is the
+// "active" hit (i.e. being moused over right now).
 static void draw_hit(cairo_t * cr, const hit & thishit)
 {
   const int screenx = det_to_screen_x(thishit.plane),
@@ -366,6 +402,7 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   cairo_stroke(cr);
 }
 
+// Set top status line, which reports on event level information
 static void set_eventn_status0()
 {
   if(theevents.empty()){
@@ -373,12 +410,13 @@ static void set_eventn_status0()
     return;
   }
 
-  nevent * THEevent = &theevents[gevi];
-  set_status(0, "Event %'d (%'d/%'d%s in the file)",
-    THEevent->nevent, gevi+1,
+  set_status(0, "Run %'d, subrun %d Event %'d (%'d/%'d%s in the file)",
+    theevents[gevi].nrun, theevents[gevi].nsubrun,
+    theevents[gevi].nevent, gevi+1,
     (int)theevents.size(), ghave_read_all?"":"+");
 }
 
+// Set second status line, which reports on timing information
 static void set_eventn_status1()
 {
   nevent * THEevent = &theevents[gevi];
@@ -402,6 +440,7 @@ static void set_eventn_status1()
   set_status(1, status1);
 }
 
+// Set third status line, which reports on hit information
 static void set_eventn_status2()
 {
   if(active_plane < 0 || active_cell < 0){
@@ -431,11 +470,13 @@ static void set_eventn_status2()
   set_status(2, status2);
 }
 
+// Set third status line to a special status when we are reading a big event
 static void set_eventn_status2alt(const int nhit, const int tothits)
 {
   set_status(2, "Processing big event, %d/%d hits", nhit, tothits);
 }
 
+// Set all status lines
 static void set_eventn_status()
 {
   set_eventn_status0();
@@ -446,6 +487,8 @@ static void set_eventn_status()
   set_eventn_status2();
 }
 
+// Draw all the hits in the event that we need to draw, depending on
+// whether we are animating or have been exposed, etc.
 static void draw_hits(cairo_t * cr, const bool fullredraw)
 {
   cairo_set_line_width(cr, 1.0);
@@ -482,9 +525,9 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
   }
 }
 
-// Unhighlight the cell that is no longer being mousedover, indicated by
+// Unhighlight the cell that is no longer being moused over, indicated by
 // oldactive_plane/cell, and highlight the new one.  Do this instead of a full
-// redraw of edarea, which is expensive and causes very noticable lag for the
+// redraw of edarea, which is expensive and causes very noticeable lag for the
 // FD.
 static void change_highlighted_cell(GtkWidget * widg,
                                     const int oldactive_plane,
@@ -502,6 +545,8 @@ static void change_highlighted_cell(GtkWidget * widg,
   cairo_destroy(cr);
 }
 
+// Handle the mouse arriving at a spot in the drawing area. Find what cell the
+// user is pointing at, highlight it, and show information about it.
 static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
                           GdkEventMotion * gevent,
                           __attribute__((unused)) gpointer data)
@@ -521,9 +566,12 @@ static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
   return TRUE;
 }
 
-// draw_event_and to_next_free_run circularly refer to each other
+// draw_event_and to_next_free_run circularly refer to each other...
 static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
 
+// Draw an event in its entirety. If animating, this function handles the
+// animation and being responsive to user actions during the animation.  It's
+// the most complicated part.
 static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
                            __attribute__((unused)) gpointer data)
 {
@@ -622,8 +670,14 @@ static gboolean draw_event_from_timer(gpointer data)
   return FALSE; // don't call me again
 }
 
-// Return true if the event is ready to be drawn.  Otherwise, we will have
-// to fetch it and call draw_event() later.
+// Move 'change' events through the event list.  If the requested event is in
+// the list, this trivially updates the integer 'gevi', the global event
+// number.  Does bounds checking and clamps the result, except in the case the
+// upper bound is not known (see the "otherwise" case below).
+//
+// Returns true if the event is ready to be drawn.  Otherwise, issues a request
+// to fetch another event and does *not* change the global event number. Another
+// call to get_event() is needed once we have the event.
 static bool get_event(const int change)
 {
   if(gevi+change >= (int)theevents.size()){
@@ -632,6 +686,7 @@ static bool get_event(const int change)
     }
     else{
       // TODO make this work with abs(change) > 1... actually, do we care?
+      // It would make it easier to jump forward many events, I suppose.
       // XXX this is great except that if events happen while not
       // in the GTK loop, we get an assertion failure on the console.
       // Maybe it's harmless, or nearly harmless, in that we just lose
@@ -671,7 +726,7 @@ static void prepare_to_swich_events()
   active_cell = active_plane = -1;
 }
 
-/** Display the next or previous event. */
+// Display the next or previous event.
 static void to_next(__attribute__((unused)) GtkWidget * widget,
                     gpointer data)
 {
@@ -681,6 +736,7 @@ static void to_next(__attribute__((unused)) GtkWidget * widget,
     draw_event(edarea, NULL, NULL);
 }
 
+// Called to move us the next event while free running
 static gboolean to_next_free_run(__attribute__((unused)) gpointer data)
 {
   bool forward = true;
@@ -708,6 +764,7 @@ static bool have_event_by_number(const unsigned int n)
   return false;
 }
 
+// Blank out the fourth status line that sometimes has error messages
 static gboolean clear_error_message(__attribute__((unused)) gpointer dt)
 {
   set_status(3, "");
@@ -751,6 +808,7 @@ static void getuserevent()
   draw_event(edarea, NULL, NULL);
 }
 
+// Handle the user clicking the "run freely" check box.
 static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
@@ -764,6 +822,7 @@ static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
   }
 }
 
+// Handle the user clicking the "cumulative animation" check box.
 static void toggle_cum_ani(GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
@@ -773,6 +832,7 @@ static void toggle_cum_ani(GtkWidget * w,
   if(cumulative_animation) switch_to_cumulative = true;
 }
 
+// Handle the user clicking the "animate" check box.
 static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
@@ -784,6 +844,7 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
   g_timeout_add(0, draw_event_from_timer, w);
 }
 
+// Convert the abstract "speed" number from the user into a delay.
 static void set_freeruninterval(const int speednum)
 {
   switch(speednum < 1?1:speednum > 11?11:speednum){
@@ -801,6 +862,7 @@ static void set_freeruninterval(const int speednum)
   }
 }
 
+// Respond to changes in the spin button for animation/free running speed
 static void adjustspeed(GtkWidget * wg,
                         __attribute__((unused)) const gpointer dt)
 {
@@ -830,10 +892,14 @@ static void adjustspeed(GtkWidget * wg,
 
 static void close_window()
 {
-  gtk_main_quit();
-  exit(0);
+  // We could quit gently:
+  // gtk_main_quit(); exit(0);
+  // But there is nothing to save, so just drop everything quickly.
+  _exit(0);
 }
 
+// Sets up the GTK window, add user event hooks, start the necessary
+// timer(s), draw the first event.
 static void setup()
 {
   gtk_init(NULL, NULL);
@@ -845,8 +911,7 @@ static void setup()
   edarea = gtk_drawing_area_new();
   setboxes();
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
-  mouseover_handle =
-    g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
+  g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
                                 | GDK_POINTER_MOTION_MASK);
 
@@ -867,9 +932,9 @@ static void setup()
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox),
                                free_running);
 
-  g_signal_connect(animate_checkbox, "toggled", G_CALLBACK(toggle_animate), edarea);
-  g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani), edarea);
-  g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun), edarea);
+  g_signal_connect(animate_checkbox, "toggled", G_CALLBACK(toggle_animate),edarea);
+  g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani),edarea);
+  g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun),edarea);
 
 
   const int initialspeednum = 5;
