@@ -42,13 +42,11 @@ static int active_plane = -1, active_cell = -1;
 //
 // Could eliminate these bools and always consult GTK_TOGGLE_BUTTON::active.
 // Would that be better?
-//
-// XXX Still a bug, probably related to the mouseover, that makes the
-// animation run multiple times sometimes.
 static bool animate = false;
 static bool cumulative_animation = true;
 static bool free_running = false;
-static int freeruninterval = 100; // ms
+
+static int freeruninterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -547,7 +545,7 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
     set_eventn_status();
 
     if(animate && currenttick != THEevent->maxtick){
-      usleep(freeruninterval * 10);
+      if(freeruninterval > 0) usleep(freeruninterval * 10);
       animating = true;
 
       while(g_main_context_iteration(NULL, FALSE));
@@ -752,8 +750,13 @@ static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
 {
   free_running = GTK_TOGGLE_BUTTON(w)->active;
   sub_toggle_mouseover();
-  if(free_running)
+  if(free_running){
     freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
+  }
+  else{
+    g_source_remove(freeruntimeoutid);
+    freeruntimeoutid = 0;
+  }
 }
 
 static void toggle_cum_ani(GtkWidget * w,
@@ -777,16 +780,34 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
   g_timeout_add(0, draw_event_from_timer, w);
 }
 
+static void set_freeruninterval(const int speednum)
+{
+  switch(speednum < 1?1:speednum > 11?11:speednum){
+    case  1: freeruninterval = (int)pow(10, 5.0); break;
+    case  2: freeruninterval = (int)pow(10, 4.5); break;
+    case  3: freeruninterval = (int)pow(10, 4.0); break;
+    case  4: freeruninterval = (int)pow(10, 3.5); break;
+    case  5: freeruninterval = (int)pow(10, 3.0); break;
+    case  6: freeruninterval = (int)pow(10, 2.5); break;
+    case  7: freeruninterval = (int)pow(10, 2.0); break;
+    case  8: freeruninterval = (int)pow(10, 1.5); break;
+    case  9: freeruninterval = (int)pow(10, 1.0); break;
+    case 10: freeruninterval = (int)pow(10, 0.5); break;
+    case 11: freeruninterval = 0; break;
+  }
+}
+
 static void adjustspeed(GtkWidget * wg,
                         __attribute__((unused)) const gpointer dt)
 {
-  freeruninterval = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
+  set_freeruninterval(gtk_adjustment_get_value(GTK_ADJUSTMENT(wg)));
 
   if(!free_running) return;
 
   // If we are animating and free running, we need to stop the current
   // animation or else we will start drawing a new event in the middle
   // of the current one when the new, unrelated, timer fires next.
+  // XXX this is not what the user expects
   cancel_draw = true;
   if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
   freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
@@ -837,8 +858,10 @@ static void setup()
   g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun), edarea);
 
 
+  const int initialspeednum = 5;
   GtkObject * const speedadj = gtk_adjustment_new
-    (freeruninterval, 1, 10000, 10, 100, 0);
+    (initialspeednum, 1, 11, 1, 1, 1);
+  set_freeruninterval(initialspeednum);
   g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
 
   GtkWidget * const speedslider
@@ -847,7 +870,7 @@ static void setup()
   GtkWidget * speedlabel = gtk_text_view_new();
   GtkTextBuffer * speedlabeltext = gtk_text_buffer_new(0);
   gtk_text_view_set_justification(GTK_TEXT_VIEW(speedlabel), GTK_JUSTIFY_CENTER);
-  const char * const speedlabelbuf = "Animation/Free run interval (ms)";
+  const char * const speedlabelbuf = "Animation/free run speed";
   gtk_text_buffer_set_text(speedlabeltext, speedlabelbuf, strlen(speedlabelbuf));
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(speedlabel), speedlabeltext);
   gtk_text_view_set_editable(GTK_TEXT_VIEW(speedlabel), false);
