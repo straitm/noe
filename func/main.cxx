@@ -55,13 +55,11 @@ static GtkWidget * edarea = NULL;
 static GtkWidget * animate_checkbox = NULL,
                  * cum_ani_checkbox = NULL,
                  * freerun_checkbox = NULL;
-static gulong mouseover_handle = 0;
 static GtkWidget * ueventbut = NULL;
 static GtkWidget * ueventbox = NULL;
 
 /* Running flags */
 static bool ghave_read_all = false;
-static bool need_another_event = false;
 static bool prefetching = false;
 static bool cancel_draw = false;
 static bool switch_to_cumulative = false;
@@ -691,7 +689,6 @@ static bool get_event(const int change)
       // in the GTK loop, we get an assertion failure on the console.
       // Maybe it's harmless, or nearly harmless, in that we just lose
       // the user input.  Not sure.  It more or less seems to work.
-      need_another_event = true;
       gtk_main_quit();
       return false;
     }
