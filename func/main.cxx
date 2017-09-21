@@ -32,6 +32,7 @@ static bool prefetching = false;
 static bool cancel_draw = false;
 static bool switch_to_cumulative = false;
 static bool animating = false;
+static bool launch_next_freerun_timer_at_draw_end = false;
 static int currenttick = 0;
 static int active_plane = -1, active_cell = -1;
 
@@ -498,6 +499,9 @@ static void change_highlighted_cell(GtkWidget * widg,
   cairo_destroy(cr);
 }
 
+// draw_event_and to_next_free_run circularly refer to each other
+static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
+
 static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
                            __attribute__((unused)) gpointer data)
 {
@@ -521,6 +525,7 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
                           : exposed ? currenttick
                           :           THEevent->maxtick;
 
+  if(animate) animating = true;
   for(currenttick = thisfirsttick; currenttick <= thislasttick; currenttick+=4){
 
     cairo_t * cr = gdk_cairo_create(widg->window);
@@ -546,7 +551,6 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
     if(animate && currenttick != THEevent->maxtick){
       if(freeruninterval > 0) usleep(freeruninterval * 10);
-      animating = true;
 
       while(g_main_context_iteration(NULL, FALSE));
       if(cancel_draw || drawn != thisdrawn) break;
@@ -563,6 +567,11 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
   if(!exposed){
     cancel_draw = true;
     animating = false;
+  }
+
+  if(launch_next_freerun_timer_at_draw_end){
+    freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
+    launch_next_freerun_timer_at_draw_end = false;
   }
 
   return FALSE;
@@ -736,8 +745,9 @@ static void sub_toggle_mouseover()
   // With free running, we draw the current event many times and appear to be
   // stuck.
   if(free_running || animate){
-    if(mouseover_handle > 0) g_signal_handler_disconnect(edarea, mouseover_handle);
-    mouseover_handle = active_plane = active_cell = -1;
+    if(mouseover_handle) g_signal_handler_disconnect(edarea, mouseover_handle);
+    mouseover_handle = 0;
+    active_plane = active_cell = -1;
   }
   else{
     mouseover_handle =
@@ -754,7 +764,7 @@ static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
     freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
   }
   else{
-    g_source_remove(freeruntimeoutid);
+    if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
     freeruntimeoutid = 0;
   }
 }
@@ -802,17 +812,27 @@ static void adjustspeed(GtkWidget * wg,
 {
   set_freeruninterval(gtk_adjustment_get_value(GTK_ADJUSTMENT(wg)));
 
+  // If we are neither animating nor free running, we're done.
+  // If we are animating but not free running, we're also done.
   if(!free_running) return;
 
-  // If we are animating and free running, we need to stop the current
-  // animation or else we will start drawing a new event in the middle
-  // of the current one when the new, unrelated, timer fires next.
-  // XXX this is not what the user expects
-  cancel_draw = true;
   if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
-  freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
-}
 
+  // If we are free running, but not animating, we can (and must) fire off
+  // the timer for the next event here.
+  if(!animating)
+    freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
+
+  // If we are animating and free running, things are tricky.  We want
+  // to continue the animation at the new speed, but we can't fire off
+  // the timer for the next free-run event, or else it might start in the
+  // middle of the current event.
+  //
+  // Instead set a flag that a new timer is needed once the current
+  // animation has finished.
+  else
+    launch_next_freerun_timer_at_draw_end = true;
+}
 
 static void close_window()
 {
