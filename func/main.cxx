@@ -320,6 +320,7 @@ static int screen_to_cell(const int x, const int y)
   int mindist = 9999, closestcell = -1;
   for(unsigned int i = 0; i < THEhits.size(); i++){
     if(THEhits[i].plane != plane) continue;
+    if(animating && THEhits[i].tdc > currenttick) continue;
     const int dist = abs(THEhits[i].cell - c);
     if(dist < mindist){
       mindist = dist;
@@ -394,8 +395,8 @@ static void set_eventn_status1()
       BOTANY_BAY_OH_NO(currenttick/64.));
   else
     pos += snprintf(status1+pos, MAXSTATUS-1-pos,
-                    "Showing tick %s%d (%s%.3f μs)",
-                    BOTANY_BAY_OH_INT(currenttick), BOTANY_BAY_OH_NO(currenttick/64.));
+      "Showing tick %s%d (%s%.3f μs)",
+      BOTANY_BAY_OH_INT(currenttick), BOTANY_BAY_OH_NO(currenttick/64.));
 
   set_status(1, status1);
 }
@@ -403,8 +404,7 @@ static void set_eventn_status1()
 static void set_eventn_status2()
 {
   if(active_plane < 0 || active_cell < 0){
-    set_status(2, "%souse over a cell for more information",
-      animate || free_running?"Turn off animation and free running and m":"M");
+    set_status(2, "Mouse over a cell for more information");
     return;
   }
 
@@ -458,6 +458,9 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
   for(unsigned int i = 0; i < THEhits.size(); i++){
     const hit & thishit = THEhits[i];
 
+    if(animating && (thishit.tdc - currenttick)%TDCSTEP != 0)
+      printf("%d %d\n", thishit.tdc, currenttick);
+
     // If we're not animating, we're just going to draw everything no matter
     // what.  Otherwise, we need to know whether to draw just the new stuff
     // or everthing up to the current tick.
@@ -481,8 +484,7 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
 // Unhighlight the cell that is no longer being mousedover, indicated by
 // oldactive_plane/cell, and highlight the new one.  Do this instead of a full
 // redraw of edarea, which is expensive and causes very noticable lag for the
-// FD. This should only be called when we are not animating, since it does not
-// check the hit times (although this would be a straightforward extension).
+// FD.
 static void change_highlighted_cell(GtkWidget * widg,
                                     const int oldactive_plane,
                                     const int oldactive_cell)
@@ -497,6 +499,25 @@ static void change_highlighted_cell(GtkWidget * widg,
       draw_hit(cr, thishit);
   }
   cairo_destroy(cr);
+}
+
+static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
+                          GdkEventMotion * gevent,
+                          __attribute__((unused)) gpointer data)
+{
+  if(gevent == NULL) return TRUE; // shouldn't happen
+  if(theevents.empty()) return TRUE; // No coordinates in this case
+
+  const int oldactive_plane = active_plane;
+  const int oldactive_cell  = active_cell;
+
+  active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
+  active_cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
+
+  change_highlighted_cell(edarea, oldactive_plane, oldactive_cell);
+  set_eventn_status2();
+
+  return TRUE;
 }
 
 // draw_event_and to_next_free_run circularly refer to each other
@@ -729,50 +750,10 @@ static void getuserevent()
   draw_event(edarea, NULL, NULL);
 }
 
-static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
-                          GdkEventMotion * gevent,
-                          __attribute__((unused)) gpointer data)
-{
-  if(gevent == NULL) return TRUE; // shouldn't happen
-  if(animate) return TRUE; // Too hard to handle, and unlikely
-                           // that the user wants it anyway.
-  if(theevents.empty()) return TRUE; // No coordinates in this case
-
-  const int oldactive_plane = active_plane;
-  const int oldactive_cell  = active_cell;
-
-  active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
-  active_cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
-
-  change_highlighted_cell(edarea, oldactive_plane, oldactive_cell);
-  set_eventn_status2();
-
-  return TRUE;
-}
-
-static void sub_toggle_mouseover()
-{
-  // Don't listen for mouseovers while animating or free running.  Otherwise,
-  // with animation, we get into odd situations that cause the animation to
-  // loop many times even if we try to ignore the signals at a higher level.
-  // With free running, we draw the current event many times and appear to be
-  // stuck.
-  if(free_running || animate){
-    if(mouseover_handle) g_signal_handler_disconnect(edarea, mouseover_handle);
-    mouseover_handle = 0;
-    active_plane = active_cell = -1;
-  }
-  else{
-    mouseover_handle =
-      g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
-  }
-}
-
 static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
   free_running = GTK_TOGGLE_BUTTON(w)->active;
-  sub_toggle_mouseover();
   if(free_running){
     freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
   }
@@ -794,7 +775,6 @@ static void toggle_cum_ani(GtkWidget * w,
 static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
-  sub_toggle_mouseover();
   // Schedule the draw for the next time the main event loop runs instead of
   // drawing immediately because otherwise, the checkbox doesn't appear checked
   // until the user moves the mouse off of it.  I don't really understand how
