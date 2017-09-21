@@ -9,6 +9,10 @@ static const int viewsep = 8; // vertical cell widths between x and y views
 
 static const int MAXSTATUS = 1024;
 
+// Let's see.  The FD always reads out in increments of 4 TDC units, but
+// the ND in increments of 1?  Is that right? XXX
+static const int TDCSTEP = 4;
+
 /* The events and the current event */
 extern std::vector<nevent> theevents;
 static int gevi = 0;
@@ -458,16 +462,12 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
     // what.  Otherwise, we need to know whether to draw just the new stuff
     // or everthing up to the current tick.
     if(animate){
-      if(cumulative_animation){
-        if(fullredraw){
-          if(thishit.tdc > currenttick) continue;
-        }
-        else{
-          if(thishit.tdc != currenttick) continue;
-        }
+      if(cumulative_animation && fullredraw){
+        if(thishit.tdc > currenttick) continue;
       }
-      else if(abs(thishit.tdc - currenttick) > 8){
-        continue;
+      else{
+        if(thishit.tdc > currenttick ||
+           thishit.tdc < currenttick - TDCSTEP-1) continue;
       }
     }
     else if(bigevent && i%50000 == 0){
@@ -526,7 +526,9 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
                           :           THEevent->maxtick;
 
   if(animate) animating = true;
-  for(currenttick = thisfirsttick; currenttick <= thislasttick; currenttick+=4){
+  for(currenttick = thisfirsttick;
+      currenttick <= thislasttick;
+      currenttick+=TDCSTEP){
 
     cairo_t * cr = gdk_cairo_create(widg->window);
     cairo_push_group(cr);
