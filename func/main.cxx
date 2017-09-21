@@ -44,7 +44,7 @@ static const int MAXSTATUS = 1024;
 static const int TDCSTEP = 4;
 
 /* The events and the current event index in the vector */
-extern std::vector<nevent> theevents;
+extern std::vector<noeevent> theevents;
 static int gevi = 0;
 
 /* GTK objects */
@@ -417,7 +417,7 @@ static void set_eventn_status0()
 // Set second status line, which reports on timing information
 static void set_eventn_status1()
 {
-  nevent * THEevent = &theevents[gevi];
+  noeevent * THEevent = &theevents[gevi];
 
   char status1[MAXSTATUS];
 
@@ -580,7 +580,7 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
   const bool exposed = ee != NULL;
   if(!exposed) drawn++;
 
-  nevent * THEevent = &theevents[gevi];
+  noeevent * THEevent = &theevents[gevi];
 
   if(!isfd && THEevent->fdlike) setfd();
 

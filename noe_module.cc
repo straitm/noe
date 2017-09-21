@@ -11,7 +11,7 @@
 #include "func/main.h"
 #include "func/event.h"
 
-std::vector<nevent> theevents;
+std::vector<noeevent> theevents;
 
 namespace noe {
 class noe : public art::EDProducer {
@@ -34,7 +34,7 @@ void noe::endJob()
 // Inject a test event with all FD cells hit
 __attribute__((unused)) static void add_test_fd_event()
 {
-  nevent ev;
+  noeevent ev;
   ev.nevent = 0;
   ev.nrun = 0;
   ev.nsubrun = 0;
@@ -55,7 +55,7 @@ __attribute__((unused)) static void add_test_fd_event()
 // Inject a test event with all ND cells hit
 __attribute__((unused)) static void add_test_nd_event()
 {
-  nevent ev;
+  noeevent ev;
   ev.nevent = 0;
   ev.nrun = 0;
   ev.nsubrun = 0;
@@ -86,7 +86,7 @@ void noe::produce(art::Event& evt)
   if(theevents.empty()) add_test_nd_event();
 #endif
 
-  nevent ev;
+  noeevent ev;
   ev.nevent = evt.event();
   ev.nrun = evt.run();
   ev.nsubrun = evt.subRun();

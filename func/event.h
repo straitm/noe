@@ -2,7 +2,7 @@ struct hit{
   int32_t cell, plane, adc, tdc;
 };
 
-struct nevent{
+struct noeevent{
   std::vector<hit> hits;
   uint32_t nevent, nrun, nsubrun;
 
