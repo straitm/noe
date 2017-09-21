@@ -893,7 +893,6 @@ static void setup()
     gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i);
   }
-  gtk_table_attach_defaults(GTK_TABLE(tab), speedlabel,       5, 6, 1, 2);
 
   gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 2+NSTATBOXES, nrow);
 
