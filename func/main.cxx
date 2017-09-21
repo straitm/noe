@@ -9,8 +9,9 @@ static const int viewsep = 8; // vertical cell widths between x and y views
 
 static const int MAXSTATUS = 1024;
 
-// Let's see.  The FD always reads out in increments of 4 TDC units, but
-// the ND in increments of 1?  Is that right? XXX
+// Let's see.  I believe both detectors read out in increments of 4 TDC units,
+// but the FD is multiplexed whereas the ND isn't, so any given channel at the
+// FD can only report every 4 * 2^N TDC units, where I think N = 2.
 static const int TDCSTEP = 4;
 
 /* The events and the current event */
@@ -786,16 +787,16 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 static void set_freeruninterval(const int speednum)
 {
   switch(speednum < 1?1:speednum > 11?11:speednum){
-    case  1: freeruninterval = (int)pow(10, 5.0); break;
-    case  2: freeruninterval = (int)pow(10, 4.5); break;
-    case  3: freeruninterval = (int)pow(10, 4.0); break;
-    case  4: freeruninterval = (int)pow(10, 3.5); break;
-    case  5: freeruninterval = (int)pow(10, 3.0); break;
-    case  6: freeruninterval = (int)pow(10, 2.5); break;
-    case  7: freeruninterval = (int)pow(10, 2.0); break;
-    case  8: freeruninterval = (int)pow(10, 1.5); break;
-    case  9: freeruninterval = (int)pow(10, 1.0); break;
-    case 10: freeruninterval = (int)pow(10, 0.5); break;
+    case  1: freeruninterval = (int)pow(10, 5.5); break;
+    case  2: freeruninterval = (int)pow(10, 5.0); break;
+    case  3: freeruninterval = (int)pow(10, 4.5); break;
+    case  4: freeruninterval = (int)pow(10, 4.0); break;
+    case  5: freeruninterval = (int)pow(10, 3.5); break;
+    case  6: freeruninterval = (int)pow(10, 3.0); break;
+    case  7: freeruninterval = (int)pow(10, 2.5); break;
+    case  8: freeruninterval = (int)pow(10, 2.0); break;
+    case  9: freeruninterval = (int)pow(10, 1.5); break;
+    case 10: freeruninterval = (int)pow(10, 1.0); break;
     case 11: freeruninterval = 0; break;
   }
 }
