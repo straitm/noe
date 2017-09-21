@@ -614,14 +614,12 @@ static bool get_event(const int change)
   return true;
 }
 
-__attribute__((unused)) static gboolean
-fetch_an_event(__attribute__((unused)) gpointer data)
+// Called when idle to load events into memory
+static gboolean prefetch_an_event(__attribute__((unused)) gpointer data)
 {
   if(ghave_read_all) return FALSE; // don't call this again
 
-  if(animating || gtk_events_pending()){
-    return TRUE;
-  }
+  if(animating || gtk_events_pending()) return TRUE;
 
   // exit GTK event loop to get another event from art
   prefetching = true;
@@ -880,7 +878,7 @@ static void setup()
 
   const int initialspeednum = 5;
   GtkObject * const speedadj = gtk_adjustment_new
-    (initialspeednum, 1, 11, 1, 1, 1);
+    (initialspeednum, 1, 11, 1, 1, 0);
   set_freeruninterval(initialspeednum);
   g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
 
@@ -957,8 +955,7 @@ static void setup()
   // they aren't supposed to according to the spec, but all the other ones do...
   gtk_widget_queue_draw(win);
 
-  if(!ghave_read_all)
-    g_timeout_add(20 /* ms */, fetch_an_event, NULL);
+  if(!ghave_read_all) g_timeout_add(20, prefetch_an_event, NULL);
 }
 
 // If we could ask for art events from art, this would be the entry point to
