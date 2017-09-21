@@ -621,17 +621,26 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
     if(animate && currenttick != THEevent->maxtick){
       if(freeruninterval > 0){
+        // The delay between animation frames is 1/100 the delay between free
+        // running events, but measured in microseconds instead of milliseconds.
+        const int animationmult = 10;
+
         // To keep the application responsive, sleep in 50ms chunks.  This is
         // kinda dumb.  GTK doesn't seem to have a way of saying "go back to
         // the main loop for X seconds".  I think the correct way to do this is
         // to use a g_timeout_add with each call doing one iteration of the
         // animation, but that's inside out from how I've written the animation
         // so far.
-        int left = freeruninterval * 10;
+        int left = freeruninterval * animationmult;
         do{
           usleep(std::min(left, 50000));
           left -= 50000;
+
+          // If the new interval is smaller, respond immediately by reducing
+          // the amount of time until the next change, and vice versa.
+          const int oldinterval = freeruninterval;
           while(g_main_context_iteration(NULL, FALSE));
+          left -= (oldinterval - freeruninterval)*animationmult;
         }while(left > 0);
       }
 
