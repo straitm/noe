@@ -550,7 +550,20 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
     set_eventn_status();
 
     if(animate && currenttick != THEevent->maxtick){
-      if(freeruninterval > 0) usleep(freeruninterval * 10);
+      if(freeruninterval > 0){
+        // To keep the application responsive, sleep in 50ms chunks.  This is
+        // kinda dumb.  GTK doesn't seem to have a way of saying "go back to
+        // the main loop for X seconds".  I think the correct way to do this is
+        // to use a g_timeout_add with each call doing one iteration of the
+        // animation, but that's inside out from how I've written the animation
+        // so far.
+        int left = freeruninterval * 10;
+        do{
+          usleep(std::min(left, 50000));
+          left -= 50000;
+          while(g_main_context_iteration(NULL, FALSE));
+        }while(left > 0);
+      }
 
       while(g_main_context_iteration(NULL, FALSE));
       if(cancel_draw || drawn != thisdrawn) break;
