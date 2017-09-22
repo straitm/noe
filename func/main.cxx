@@ -166,8 +166,9 @@ static void set_status(const int boxn, const char * format, ...)
   gtk_text_buffer_set_text(stattext[boxn], buf, strlen(buf));
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[boxn]), stattext[boxn]);
 
-  // Makes performance much better for reasons I don't understand
-  while(g_main_context_iteration(NULL, FALSE));
+  // Makes performance much better for reasons I don't understand,
+  // but don't call it if we're not in the gtk main loop
+  if(!prefetching) while(g_main_context_iteration(NULL, FALSE));
 }
 
 // Given a hit energy, set red, green and blue to the color we want to display
@@ -685,7 +686,8 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
   }
 
   if(launch_next_freerun_timer_at_draw_end){
-    freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
+    freeruntimeoutid =
+      g_timeout_add(std::max(1, freeruninterval), to_next_free_run, NULL);
     launch_next_freerun_timer_at_draw_end = false;
   }
 
@@ -844,7 +846,18 @@ static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
 {
   free_running = GTK_TOGGLE_BUTTON(w)->active;
   if(free_running){
-    freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
+    // Do not call g_timeout_add with an interval of zero, since that seems
+    // to be a special case that causes the function to be run repeatedly
+    // *without* returning to the main loop, or without doing all the things
+    // in the main loop that are usually done, or something. In any case,
+    // empirically, it causes multiple (infinite?) calls to to_next_free_run
+    // after gtk_main_quit() has been called, which locks us up. It is quite
+    // possible that by setting the interval to 1, it only makes it *unlikely*
+    // that further events are processed between gtk_main_quit() and exiting
+    // the main loop, in which case I have a bug that has only been suppressed
+    // instead of fixed.
+    freeruntimeoutid =
+      g_timeout_add(std::max(1, freeruninterval), to_next_free_run, NULL);
   }
   else{
     if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
@@ -917,7 +930,8 @@ static void adjustspeed(GtkWidget * wg,
   // If we are free running, but not animating, we can (and must) fire off
   // the timer for the next event here.
   if(!animating)
-    freeruntimeoutid = g_timeout_add(freeruninterval, to_next_free_run, NULL);
+    freeruntimeoutid =
+      g_timeout_add(std::max(1,freeruninterval), to_next_free_run, NULL);
 
   // If we are animating and free running, things are tricky.  We want
   // to continue the animation at the new speed, but we can't fire off
@@ -1090,6 +1104,7 @@ void realmain(const bool have_read_all)
   }
   else if(prefetching){
     set_eventn_status0();
+    prefetching = false;
   }
   else{
     get_event(1);
