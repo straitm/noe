@@ -252,6 +252,16 @@ static void draw_background(cairo_t * cr)
   }
 }
 
+static bool visible_hit_for_animation(const int32_t tdc)
+{
+  if(!animating) return true;
+
+  if(cumulative_animation) return tdc <= currenttick;
+
+  return tdc <= currenttick &&
+         tdc >= currenttick - TDCSTEP-1;
+}
+
 // Given the plane, returns the left side of the screen position in Cairo
 // coordinates.  More precisely, returns half a pixel to the left of the left
 // side.
@@ -353,7 +363,7 @@ static int screen_to_cell(const int x, const int y)
   int mindist = 9999, closestcell = -1;
   for(unsigned int i = 0; i < THEhits.size(); i++){
     if(THEhits[i].plane != plane) continue;
-    if(animating && THEhits[i].tdc > currenttick) continue;
+    if(!visible_hit_for_animation(THEhits[i].tdc)) continue;
     const int dist = abs(THEhits[i].cell - c);
     if(dist < mindist){
       mindist = dist;
@@ -977,18 +987,20 @@ static void setup()
 
   GtkWidget * const speedslider
     = gtk_spin_button_new(GTK_ADJUSTMENT(speedadj), 10, 0);
+  gtk_entry_set_max_length (GTK_ENTRY(speedadj), 2);
+  gtk_entry_set_width_chars(GTK_ENTRY(speedadj), 2);
 
   GtkWidget * speedlabel = gtk_text_view_new();
   GtkTextBuffer * speedlabeltext = gtk_text_buffer_new(0);
   gtk_text_view_set_justification(GTK_TEXT_VIEW(speedlabel), GTK_JUSTIFY_CENTER);
-  const char * const speedlabelbuf = "Animation/free run speed";
+  const char * const speedlabelbuf = "Speed";
   gtk_text_buffer_set_text(speedlabeltext, speedlabelbuf, strlen(speedlabelbuf));
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(speedlabel), speedlabeltext);
   gtk_text_view_set_editable(GTK_TEXT_VIEW(speedlabel), false);
 
   ueventbox = gtk_entry_new();
   gtk_entry_set_max_length(GTK_ENTRY(ueventbox), 20);//length of a int64
-  gtk_entry_set_width_chars(GTK_ENTRY(ueventbox), 10);
+  gtk_entry_set_width_chars(GTK_ENTRY(ueventbox), 5);
   g_signal_connect(ueventbox, "activate", G_CALLBACK(getuserevent), NULL);
 
   ueventbut = gtk_button_new_with_mnemonic("_Go to event");
