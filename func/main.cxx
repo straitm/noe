@@ -524,9 +524,6 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
   for(unsigned int i = 0; i < THEhits.size(); i++){
     const hit & thishit = THEhits[i];
 
-    if(animating && (thishit.tdc - currenttick)%TDCSTEP != 0)
-      printf("%d %d\n", thishit.tdc, currenttick);
-
     // If we're not animating, we're just going to draw everything no matter
     // what.  Otherwise, we need to know whether to draw just the new stuff
     // or everthing up to the current tick.
