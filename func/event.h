@@ -1,5 +1,7 @@
 struct hit{
   int32_t cell, plane, adc, tdc;
+  float tns;
+  bool good_tns;
 };
 
 struct noeevent{

@@ -421,17 +421,17 @@ static void set_eventn_status1()
 
   char status1[MAXSTATUS];
 
-  int pos = snprintf(status1, MAXSTATUS-1, "Ticks %s%'d through %'d.  ",
+  int pos = snprintf(status1, MAXSTATUS, "Ticks %s%'d through %'d.  ",
              BOTANY_BAY_OH_INT(THEevent->mintick), THEevent->maxtick);
   if(!animate)
-    pos += snprintf(status1+pos, MAXSTATUS-1-pos, "Showing all ticks");
+    pos += snprintf(status1+pos, MAXSTATUS-pos, "Showing all ticks");
   else if(cumulative_animation)
-    pos += snprintf(status1+pos, MAXSTATUS-1-pos,
+    pos += snprintf(status1+pos, MAXSTATUS-pos,
       "Showing ticks %s%d through %s%d (%s%.3f μs)",
       BOTANY_BAY_OH_INT(THEevent->mintick), BOTANY_BAY_OH_INT(currenttick),
       BOTANY_BAY_OH_NO(currenttick/64.));
   else
-    pos += snprintf(status1+pos, MAXSTATUS-1-pos,
+    pos += snprintf(status1+pos, MAXSTATUS-pos,
       "Showing tick %s%d (%s%.3f μs)",
       BOTANY_BAY_OH_INT(currenttick), BOTANY_BAY_OH_NO(currenttick/64.));
 
@@ -447,22 +447,35 @@ static void set_eventn_status2()
   }
 
   char status2[MAXSTATUS];
-  int pos = snprintf(status2, MAXSTATUS-1, "Plane %d, cell %d: ",
+  int pos = snprintf(status2, MAXSTATUS, "Plane %d, cell %d: ",
                      active_plane, active_cell);
 
-  // TODO: display calibrated energies
+  // TODO: display calibrated energies when possible
   std::vector<hit> & THEhits = theevents[gevi].hits;
   bool needseparator = false;
+
+  // TODO: make this more flexible.  XXX crashes if this is large.
+  const int maxmatches = 2;
+  int matches = 0;
   for(unsigned int i = 0; i < THEhits.size(); i++){
     if(THEhits[i].plane == active_plane &&
        THEhits[i].cell  == active_cell){
-      pos += snprintf(status2+pos, MAXSTATUS-1-pos,
-          "%sTDC = %s%d (%s%.3f μs), ADC = %s%d",
-          needseparator?"; ":"",
-          BOTANY_BAY_OH_INT(THEhits[i].tdc),
-          BOTANY_BAY_OH_NO (THEhits[i].tdc/64.),
-          BOTANY_BAY_OH_INT(THEhits[i].adc));
-      needseparator = true;
+      matches++;
+      if(matches <= maxmatches){
+        pos += pos >= MAXSTATUS?0:snprintf(status2+pos, MAXSTATUS-pos,
+            "%sTDC = %s%d (%s%.3f μs), TNS = %s%.3f μs%s, ADC = %s%d",
+            needseparator?"; ":"",
+            BOTANY_BAY_OH_INT(THEhits[i].tdc),
+            BOTANY_BAY_OH_NO (THEhits[i].tdc/64.),
+            BOTANY_BAY_OH_NO (THEhits[i].tns/1000),
+            THEhits[i].good_tns?"":"(bad)",
+            BOTANY_BAY_OH_INT(THEhits[i].adc));
+        needseparator = true;
+      }
+      else if(matches == maxmatches+1){
+        pos += pos >= MAXSTATUS?0:snprintf(status2+pos, MAXSTATUS-pos,
+            "; and more...");
+      }
     }
   }
   set_status(2, status2);

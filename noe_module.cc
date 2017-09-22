@@ -97,6 +97,8 @@ void noe::produce(art::Event& evt)
     thehit.plane = c.Plane();
     thehit.adc = c.ADC();
     thehit.tdc = c.TDC();
+    thehit.tns = c.TNS();
+    thehit.good_tns = c.GoodTiming();
     ev.addhit(thehit);
   }
   theevents.push_back(ev);
