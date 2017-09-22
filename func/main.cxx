@@ -79,7 +79,7 @@ static bool animate = false;
 static bool cumulative_animation = true;
 static bool free_running = false;
 
-static int freeruninterval = 0; // ms.  Immediately overwritten.
+static gulong freeruninterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -657,15 +657,25 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
         // so far.
         int left = freeruninterval * animationmult;
         do{
-          usleep(std::min(left, 50000));
-          left -= 50000;
+          // Special case: if the abstract "speed" is zero, so
+          // freeruninterval is G_MAXULONG, hold here indefinitely.
+          if(freeruninterval == G_MAXULONG){
+            usleep(50000);
+          }
+          else{
+            usleep(std::min(left, 50000));
+            left -= 50000;
+          }
 
           // If the new interval is smaller, respond immediately by reducing
           // the amount of time until the next change, and vice versa.
-          const int oldinterval = freeruninterval;
+          const gulong oldinterval = freeruninterval;
           while(g_main_context_iteration(NULL, FALSE));
-          left -= (oldinterval - freeruninterval)*animationmult;
-        }while(left > 0);
+          if(oldinterval == G_MAXULONG)
+            left = 0; // immediately go to next tick when moving from speed 0
+          else
+            left -= (oldinterval - freeruninterval)*animationmult;
+        }while(left > 0 || freeruninterval == G_MAXULONG);
       }
 
       while(g_main_context_iteration(NULL, FALSE));
@@ -687,7 +697,7 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
   if(launch_next_freerun_timer_at_draw_end){
     freeruntimeoutid =
-      g_timeout_add(std::max(1, freeruninterval), to_next_free_run, NULL);
+      g_timeout_add(std::max((gulong)1, freeruninterval), to_next_free_run, NULL);
     launch_next_freerun_timer_at_draw_end = false;
   }
 
@@ -857,7 +867,7 @@ static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
     // the main loop, in which case I have a bug that has only been suppressed
     // instead of fixed.
     freeruntimeoutid =
-      g_timeout_add(std::max(1, freeruninterval), to_next_free_run, NULL);
+      g_timeout_add(std::max((gulong)1, freeruninterval), to_next_free_run, NULL);
   }
   else{
     if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
@@ -900,7 +910,8 @@ static void restart_animation(__attribute__((unused)) GtkWidget * w,
 // Convert the abstract "speed" number from the user into a delay.
 static void set_freeruninterval(const int speednum)
 {
-  switch(speednum < 1?1:speednum > 11?11:speednum){
+  switch(speednum < 0?0:speednum > 11?11:speednum){
+    case  0: freeruninterval = G_MAXULONG; break;
     case  1: freeruninterval = (int)pow(10, 5.0); break;
     case  2: freeruninterval = (int)pow(10, 4.5); break;
     case  3: freeruninterval = (int)pow(10, 4.0); break;
@@ -931,7 +942,7 @@ static void adjustspeed(GtkWidget * wg,
   // the timer for the next event here.
   if(!animating)
     freeruntimeoutid =
-      g_timeout_add(std::max(1,freeruninterval), to_next_free_run, NULL);
+      g_timeout_add(std::max((gulong)1,freeruninterval), to_next_free_run, NULL);
 
   // If we are animating and free running, things are tricky.  We want
   // to continue the animation at the new speed, but we can't fire off
@@ -1010,7 +1021,7 @@ static void setup()
 
   const int initialspeednum = 5;
   GtkObject * const speedadj = gtk_adjustment_new
-    (initialspeednum, 1, 11, 1, 1, 0);
+    (initialspeednum, 0, 11, 1, 1, 0);
   set_freeruninterval(initialspeednum);
   g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
 
