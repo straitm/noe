@@ -944,6 +944,20 @@ static void adjustspeed(GtkWidget * wg,
     launch_next_freerun_timer_at_draw_end = true;
 }
 
+// Called when the window is resized or moved. The buttons don't redraw
+// themselves when the window is resized, so we have to get it done. I don't
+// want to do this when it is resized, but how can I tell which it is? I also
+// don't really want to call this 100 times when a user slowly resizes a window
+// that takes a long time to draw, but nor do I want to write a complex system
+// for dealing with that case...
+static gboolean redraw_window(GtkWidget * win,
+                              __attribute__((unused)) GdkEventConfigure * event,
+                              __attribute__((unused)) gpointer d)
+{
+  gtk_widget_queue_draw(win);
+  return FALSE; // *do* propagate this to children
+}
+
 static void close_window()
 {
   // We could quit gently:
@@ -964,6 +978,7 @@ static void setup()
 
   edarea = gtk_drawing_area_new();
   setboxes();
+  g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
   g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
