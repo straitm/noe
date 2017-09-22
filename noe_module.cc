@@ -90,6 +90,12 @@ void noe::produce(art::Event& evt)
   ev.nevent = evt.event();
   ev.nrun = evt.run();
   ev.nsubrun = evt.subRun();
+
+  // When we're reading in an event, the GUI is unresponsive. This is
+  // a consequence of how we're working around art's design choices.
+  // But this loop is not the bottleneck. The delay is inside art, so
+  // there's no way to put hooks in the middle of it to keep the GUI
+  // responsive.
   for(unsigned int i = 0; i < cellhits->size(); i++){
     const rb::CellHit & c = (*cellhits)[i];
     hit thehit;
@@ -103,11 +109,7 @@ void noe::produce(art::Event& evt)
   }
   theevents.push_back(ev);
 
-  // Buffer some events before popping up the GUI so that the chance of getting
-  // stuck in some funny case while we are fetching more events is reduced.
-  // 25 events takes about 1 second for far detector ddenergy events, which are
-  // about as heavy as they come.  Well, except for monopole MC...
-  if(theevents.size() >= 2) realmain(false);
+  realmain(false);
 }
 
 DEFINE_ART_MODULE(noe);

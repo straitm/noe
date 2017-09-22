@@ -464,7 +464,7 @@ static void set_eventn_status2()
   std::vector<hit> & THEhits = theevents[gevi].hits;
   bool needseparator = false;
 
-  // TODO: make this more flexible.  XXX crashes if this is large.
+  // TODO: make this more flexible.
   const int maxmatches = 2;
   int matches = 0;
   for(unsigned int i = 0; i < THEhits.size(); i++){
@@ -492,7 +492,7 @@ static void set_eventn_status2()
 }
 
 // Set third status line to a special status when we are reading a big event
-static void set_eventn_status2alt(const int nhit, const int tothits)
+static void set_eventn_status2progress(const int nhit, const int tothits)
 {
   set_status(2, "Processing big event, %d/%d hits", nhit, tothits);
 }
@@ -539,7 +539,7 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
       }
     }
     else if(bigevent && i%50000 == 0){
-      set_eventn_status2alt(i, THEhits.size());
+      set_eventn_status2progress(i, THEhits.size());
     }
 
     draw_hit(cr, thishit);
@@ -1067,6 +1067,10 @@ static void setup()
 
   if(!ghave_read_all) g_timeout_add(20, prefetch_an_event, NULL);
 }
+
+/*********************************************************************/
+/*                          Public functions                         */
+/*********************************************************************/
 
 // If we could ask for art events from art, this would be the entry point to
 // the program.  However, art only allows access to the art events through its
