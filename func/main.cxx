@@ -987,8 +987,8 @@ static void setup()
 
   GtkWidget * const speedslider
     = gtk_spin_button_new(GTK_ADJUSTMENT(speedadj), 10, 0);
-  gtk_entry_set_max_length (GTK_ENTRY(speedadj), 2);
-  gtk_entry_set_width_chars(GTK_ENTRY(speedadj), 2);
+  gtk_entry_set_max_length (GTK_ENTRY(speedslider), 2);
+  gtk_entry_set_width_chars(GTK_ENTRY(speedslider), 2);
 
   GtkWidget * speedlabel = gtk_text_view_new();
   GtkTextBuffer * speedlabeltext = gtk_text_buffer_new(0);
