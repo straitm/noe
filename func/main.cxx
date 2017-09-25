@@ -57,12 +57,14 @@ static GtkWidget * animate_checkbox = NULL,
                  * freerun_checkbox = NULL;
 static GtkWidget * ueventbut = NULL;
 static GtkWidget * ueventbox = NULL;
+static GtkWidget * tickslider = NULL;
 
-/* Running flags */
+/* Running flags.  A bit of a mess... */
 static bool ghave_read_all = false;
 static bool prefetching = false;
 static bool cancel_draw = false;
-static bool switch_to_cumulative = false;
+static bool user_action_requires_redraw = false;
+static bool user_set_currenttick = false;
 static bool animating = false;
 static bool launch_next_freerun_timer_at_draw_end = false;
 static int currenttick = 0;
@@ -603,30 +605,37 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 
   noeevent * THEevent = &theevents[gevi];
 
+  gtk_spin_button_set_range(GTK_SPIN_BUTTON(tickslider),
+                            THEevent->mintick, THEevent->maxtick);
+
   if(!isfd && THEevent->fdlike) setfd();
 
   cancel_draw = false;
 
   const int thisfirsttick = !animate? THEevent->maxtick
-                          : exposed ? currenttick
+                          : exposed || user_set_currenttick ? currenttick
                           :           THEevent->mintick,
             thislasttick =  !animate?THEevent->maxtick
                           : exposed ? currenttick
                           :           THEevent->maxtick;
+
+  user_set_currenttick = false;
 
   if(animate) animating = true;
   for(currenttick = thisfirsttick;
       currenttick <= thislasttick;
       currenttick+=TDCSTEP){
 
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(tickslider), currenttick);
+
     cairo_t * cr = gdk_cairo_create(widg->window);
     cairo_push_group(cr);
 
     // Do not blank the display in the middle of an animation unless necessary
-    const bool need_redraw = switch_to_cumulative || exposed || !animate ||
+    const bool need_redraw = user_action_requires_redraw || exposed || !animate ||
        (animate && currenttick == THEevent->mintick) ||
        (animate && !cumulative_animation);
-    switch_to_cumulative = false;
+    user_action_requires_redraw = false;
     if(need_redraw) draw_background(cr);
 
     draw_hits(cr, need_redraw);
@@ -879,7 +888,7 @@ static void toggle_cum_ani(GtkWidget * w,
   cumulative_animation = GTK_TOGGLE_BUTTON(w)->active;
 
   // Must note that we've switched to trigger a full redraw
-  if(cumulative_animation) switch_to_cumulative = true;
+  if(cumulative_animation) user_action_requires_redraw = true;
 }
 
 // Handle the user clicking the "animate" check box.
@@ -921,6 +930,15 @@ static void set_freeruninterval(const int speednum)
     case 10: freeruninterval = (int)pow(10, 0.5); break;
     case 11: freeruninterval = 0; break;
   }
+}
+
+static void adjusttick(GtkWidget * wg,
+                        __attribute__((unused)) const gpointer dt)
+{
+  currenttick = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
+  user_action_requires_redraw = true;
+  user_set_currenttick = true;
+  g_timeout_add(0, draw_event_from_timer, NULL);
 }
 
 // Respond to changes in the spin button for animation/free running speed
@@ -1016,6 +1034,25 @@ static void setup()
   GtkWidget * re_an_button = gtk_button_new_with_mnemonic("_Restart animation");
   g_signal_connect(re_an_button, "clicked", G_CALLBACK(restart_animation), NULL);
 
+  /* tick select spin button */
+  const int initialticknum = 0;
+  GtkObject * const tickadj = gtk_adjustment_new
+    (initialticknum, 0, 1000, 1, 10, 0);
+  tickslider = gtk_spin_button_new(GTK_ADJUSTMENT(tickadj), 10, 0);
+  g_signal_connect(tickadj, "value_changed", G_CALLBACK(adjusttick), NULL);
+  gtk_entry_set_max_length (GTK_ENTRY(tickslider), 6);
+  gtk_entry_set_width_chars(GTK_ENTRY(tickslider), 6);
+
+  GtkWidget * ticklabel = gtk_text_view_new();
+  GtkTextBuffer * ticklabeltext = gtk_text_buffer_new(0);
+  gtk_text_view_set_justification(GTK_TEXT_VIEW(ticklabel), GTK_JUSTIFY_CENTER);
+  const char * const ticklabelbuf = "Tick";
+  gtk_text_buffer_set_text(ticklabeltext, ticklabelbuf, strlen(ticklabelbuf));
+  gtk_text_view_set_buffer(GTK_TEXT_VIEW(ticklabel), ticklabeltext);
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(ticklabel), false);
+
+
+  /* speed spin button */
   const int initialspeednum = 5;
   GtkObject * const speedadj = gtk_adjustment_new
     (initialspeednum, 0, 11, 1, 1, 0);
@@ -1035,6 +1072,7 @@ static void setup()
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(speedlabel), speedlabeltext);
   gtk_text_view_set_editable(GTK_TEXT_VIEW(speedlabel), false);
 
+
   ueventbox = gtk_entry_new();
   gtk_entry_set_max_length(GTK_ENTRY(ueventbox), 20);//length of a int64
   gtk_entry_set_width_chars(GTK_ENTRY(ueventbox), 5);
@@ -1044,7 +1082,7 @@ static void setup()
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
 
-  const int nrow = 3+NSTATBOXES, ncol = 9;
+  const int nrow = 3+NSTATBOXES, ncol = 10;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
@@ -1052,6 +1090,7 @@ static void setup()
   int c = 0;
   gtk_table_attach_defaults(GTK_TABLE(tab), prev,             c, c+1, 0, 1); c++;
   gtk_table_attach_defaults(GTK_TABLE(tab), next,             c, c+1, 0, 1); c++;
+  gtk_table_attach_defaults(GTK_TABLE(tab), tickslider,       c, c+1, 0, 1); c++;
   gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, c, c+1, 0, 1); c++;
   gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, c, c+1, 0, 1); c++;
   gtk_table_attach_defaults(GTK_TABLE(tab), re_an_button,     c, c+1, 0, 1); c++;
@@ -1062,6 +1101,9 @@ static void setup()
   }
 
   for(int i = 0; i < ncol; i++){
+    if(i == 2){
+      gtk_table_attach_defaults(GTK_TABLE(tab), ticklabel,  i, i+1, 1, 2);
+    }
     if(i == 6){
       gtk_table_attach_defaults(GTK_TABLE(tab), speedlabel, i, i+1, 1, 2);
     }
