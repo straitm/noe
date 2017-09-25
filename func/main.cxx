@@ -33,6 +33,11 @@ Code style:
 #include <string.h>
 #include "event.h"
 
+struct DRAWPARS{
+  int32_t firsttick, lasttick;
+  bool redraw;
+};
+
 static const int viewsep = 8; // vertical cell widths between x and y views
 
 // Maximum length of any string being printed to a status bar
@@ -49,6 +54,7 @@ static int gevi = 0;
 
 /* GTK objects */
 static const int NSTATBOXES = 4;
+static GtkWidget * win = NULL;
 static GtkWidget * statbox[NSTATBOXES];
 static GtkTextBuffer * stattext[NSTATBOXES];
 static GtkWidget * edarea = NULL;
@@ -59,15 +65,11 @@ static GtkWidget * ueventbut = NULL;
 static GtkWidget * ueventbox = NULL;
 static GtkWidget * tickslider = NULL;
 
-/* Running flags.  A bit of a mess... */
+/* Running flags.  */
 static bool ghave_read_all = false;
 static bool prefetching = false;
-static bool cancel_draw = false;
-static bool user_action_requires_redraw = false;
-static bool user_set_currenttick = false;
-static bool animating = false;
-static bool launch_next_freerun_timer_at_draw_end = false;
-static int currenttick = 0;
+
+static int currentmintick = 0, currentmaxtick = 0;
 static int active_plane = -1, active_cell = -1;
 
 /* Ticky boxes flags */
@@ -83,6 +85,7 @@ static bool free_running = false;
 
 static gulong freeruninterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
+static gulong animatetimeoutid = 0;
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 static const int NDnplanes_perview = 8 * 12 + 11,
@@ -156,8 +159,7 @@ static void setfd()
 #define BOTANY_BAY_OH_NO(x) x < 0?"−":"", fabs(x)
 #define BOTANY_BAY_OH_INT(x) x < 0?"−":"", abs(x)
 
-// Update the given status bar to the given text and also process all
-// window events.
+// Update the given status bar to the given text
 static void set_status(const int boxn, const char * format, ...)
 {
   va_list ap;
@@ -167,10 +169,7 @@ static void set_status(const int boxn, const char * format, ...)
 
   gtk_text_buffer_set_text(stattext[boxn], buf, strlen(buf));
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[boxn]), stattext[boxn]);
-
-  // Makes performance much better for reasons I don't understand,
-  // but don't call it if we're not in the gtk main loop
-  if(!prefetching) while(g_main_context_iteration(NULL, FALSE));
+  gtk_widget_draw(statbox[boxn], NULL);
 }
 
 // Given a hit energy, set red, green and blue to the color we want to display
@@ -257,12 +256,12 @@ static void draw_background(cairo_t * cr)
 
 static bool visible_hit_for_animation(const int32_t tdc)
 {
-  if(!animating) return true;
+  if(!animate) return true;
 
-  if(cumulative_animation) return tdc <= currenttick;
+  if(cumulative_animation) return tdc <= currentmaxtick;
 
-  return tdc <= currenttick &&
-         tdc >= currenttick - TDCSTEP-1;
+  return tdc <= currentmaxtick &&
+         tdc >= currentmaxtick - TDCSTEP-1;
 }
 
 // Given the plane, returns the left side of the screen position in Cairo
@@ -440,13 +439,14 @@ static void set_eventn_status1()
     pos += snprintf(status1+pos, MAXSTATUS-pos, "Showing all ticks");
   else if(cumulative_animation)
     pos += snprintf(status1+pos, MAXSTATUS-pos,
-      "Showing ticks %s%d through %s%d (%s%.3f μs)",
-      BOTANY_BAY_OH_INT(THEevent->mintick), BOTANY_BAY_OH_INT(currenttick),
-      BOTANY_BAY_OH_NO(currenttick/64.));
+      "Showing ticks %s%d through %s%d (%s%.3f through %s%.3f μs)",
+      BOTANY_BAY_OH_INT(currentmintick), BOTANY_BAY_OH_INT(currentmaxtick),
+      BOTANY_BAY_OH_NO(currentmintick/64.),
+      BOTANY_BAY_OH_NO(currentmaxtick/64.));
   else
     pos += snprintf(status1+pos, MAXSTATUS-pos,
       "Showing tick %s%d (%s%.3f μs)",
-      BOTANY_BAY_OH_INT(currenttick), BOTANY_BAY_OH_NO(currenttick/64.));
+      BOTANY_BAY_OH_INT(currentmaxtick), BOTANY_BAY_OH_NO(currentmaxtick/64.));
 
   set_status(1, status1);
 }
@@ -513,7 +513,7 @@ static void set_eventn_status()
 
 // Draw all the hits in the event that we need to draw, depending on
 // whether we are animating or have been exposed, etc.
-static void draw_hits(cairo_t * cr, const bool fullredraw)
+static void draw_hits(cairo_t * cr, const DRAWPARS * drawpars)
 {
   cairo_set_line_width(cr, 1.0);
 
@@ -526,21 +526,11 @@ static void draw_hits(cairo_t * cr, const bool fullredraw)
   for(unsigned int i = 0; i < THEhits.size(); i++){
     const hit & thishit = THEhits[i];
 
-    // If we're not animating, we're just going to draw everything no matter
-    // what.  Otherwise, we need to know whether to draw just the new stuff
-    // or everthing up to the current tick.
-    if(animate){
-      if(cumulative_animation && fullredraw){
-        if(thishit.tdc > currenttick) continue;
-      }
-      else{
-        if(thishit.tdc > currenttick ||
-           thishit.tdc < currenttick - TDCSTEP-1) continue;
-      }
-    }
-    else if(bigevent && i%50000 == 0){
+    if(thishit.tdc < drawpars->firsttick ||
+       thishit.tdc > drawpars->lasttick) continue;
+
+    if(bigevent && i%50000 == 0)
       set_eventn_status2progress(i, THEhits.size());
-    }
 
     draw_hit(cr, thishit);
   }
@@ -590,121 +580,84 @@ static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
 // draw_event_and to_next_free_run circularly refer to each other...
 static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
 
-// Draw an event in its entirety. If animating, this function handles the
-// animation and being responsive to user actions during the animation.  It's
-// the most complicated part.
-static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
-                           __attribute__((unused)) gpointer data)
+// Draw a whole event, a range, or an animation frame, as dictated by
+// the DRAWPARS.
+static void draw_event(DRAWPARS * drawpars)
 {
   set_eventn_status();
-  if(theevents.empty()) return TRUE;
-
-  static int drawn = 0;
-  const bool exposed = ee != NULL;
-  if(!exposed) drawn++;
+  if(theevents.empty()) return;
 
   noeevent * THEevent = &theevents[gevi];
 
   gtk_spin_button_set_range(GTK_SPIN_BUTTON(tickslider),
                             THEevent->mintick, THEevent->maxtick);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(tickslider), drawpars->lasttick);
 
   if(!isfd && THEevent->fdlike) setfd();
 
-  cancel_draw = false;
+  cairo_t * cr = gdk_cairo_create(edarea->window);
+  cairo_push_group(cr);
 
-  const int thisfirsttick = !animate? THEevent->maxtick
-                          : exposed || user_set_currenttick ? currenttick
-                          :           THEevent->mintick,
-            thislasttick =  !animate?THEevent->maxtick
-                          : exposed ? currenttick
-                          :           THEevent->maxtick;
+  // Do not blank the display in the middle of an animation unless necessary
+  if(drawpars->redraw) draw_background(cr);
 
-  user_set_currenttick = false;
+  draw_hits(cr, drawpars);
 
-  if(animate) animating = true;
-  for(currenttick = thisfirsttick;
-      currenttick <= thislasttick;
-      currenttick+=TDCSTEP){
+  cairo_pop_group_to_source(cr);
+  cairo_paint(cr);
+  cairo_destroy(cr);
+}
 
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(tickslider), currenttick);
+static gboolean redraw_event(__attribute__((unused)) GtkWidget *widg,
+                             __attribute__((unused)) GdkEventExpose * ee,
+                             __attribute__((unused)) gpointer data)
+{
+  DRAWPARS drawpars;
+  drawpars.firsttick = currentmintick;
+  drawpars.lasttick  = currentmaxtick;
+  drawpars.redraw = true;
+  draw_event(&drawpars);
 
-    cairo_t * cr = gdk_cairo_create(widg->window);
-    cairo_push_group(cr);
+  return FALSE;
+}
 
-    // Do not blank the display in the middle of an animation unless necessary
-    const bool need_redraw = user_action_requires_redraw || exposed || !animate ||
-       (animate && currenttick == THEevent->mintick) ||
-       (animate && !cumulative_animation);
-    user_action_requires_redraw = false;
-    if(need_redraw) draw_background(cr);
+static gboolean draw_whole_event()
+{
+  DRAWPARS drawpars;
+  currentmintick = drawpars.firsttick = theevents[gevi].mintick;
+  currentmaxtick = drawpars.lasttick  = theevents[gevi].maxtick;
+  drawpars.redraw = true;
+  draw_event(&drawpars);
 
-    draw_hits(cr, need_redraw);
+  return FALSE;
+}
 
-    cairo_pop_group_to_source(cr);
-    cairo_paint(cr);
-    cairo_destroy(cr);
+static gboolean animation_step(__attribute__((unused)) gpointer data)
+{
+  DRAWPARS drawpars;
+  drawpars.redraw = currentmaxtick ==
+    theevents[gevi].mintick || !cumulative_animation;
+  currentmaxtick += TDCSTEP;
+  if(!cumulative_animation) currentmintick = currentmaxtick;
 
-    // Check if we have started drawing another event while
-    // still in here.  If so, don't keep drawing this one.
-    const int thisdrawn = drawn;
-    set_eventn_status();
+  drawpars.firsttick = currentmintick;
+  drawpars.lasttick  = currentmaxtick;
+  draw_event(&drawpars);
+  return animate && currentmaxtick != theevents[gevi].maxtick;
+}
 
-    if(animate && currenttick != THEevent->maxtick){
-      if(freeruninterval > 0){
-        // The delay between animation frames is 3/100 the delay between free
-        // running events, but measured in microseconds instead of milliseconds.
-        const int animationmult = 30;
-
-        // To keep the application responsive, sleep in 50ms chunks.  This is
-        // kinda dumb.  GTK doesn't seem to have a way of saying "go back to
-        // the main loop for X seconds".  I think the correct way to do this is
-        // to use a g_timeout_add with each call doing one iteration of the
-        // animation, but that's inside out from how I've written the animation
-        // so far.
-        int left = freeruninterval * animationmult;
-        do{
-          // Special case: if the abstract "speed" is zero, so
-          // freeruninterval is G_MAXULONG, hold here indefinitely.
-          if(freeruninterval == G_MAXULONG){
-            usleep(50000);
-          }
-          else{
-            usleep(std::min(left, 50000));
-            left -= 50000;
-          }
-
-          // If the new interval is smaller, respond immediately by reducing
-          // the amount of time until the next change, and vice versa.
-          const gulong oldinterval = freeruninterval;
-          while(g_main_context_iteration(NULL, FALSE));
-          if(oldinterval == G_MAXULONG)
-            left = 0; // immediately go to next tick when moving from speed 0
-          else
-            left -= (oldinterval - freeruninterval)*animationmult;
-        }while(left > 0 || freeruninterval == G_MAXULONG);
-      }
-
-      while(g_main_context_iteration(NULL, FALSE));
-      if(cancel_draw || drawn != thisdrawn) break;
-    }
+static gboolean handle_event()
+{
+  if(animate){
+    currentmintick = currentmaxtick = theevents[gevi].mintick;
+    if(animatetimeoutid) g_source_remove(animatetimeoutid);
+    animatetimeoutid =
+      g_timeout_add(std::max(1, (int)(freeruninterval*0.03)),
+                    animation_step, NULL);
   }
-
-  // Set again at the end in case we were displaying a status bar
-  if(!cancel_draw)
-    set_eventn_status();
-
-  // If we are moving to a new detector event, make sure we don't keep trying
-  // to draw this detector event.  However, if we're here because of an X
-  // expose event, we do want to keep going.
-  if(!exposed){
-    cancel_draw = true;
-    animating = false;
-  }
-
-  if(launch_next_freerun_timer_at_draw_end){
-    freeruntimeoutid =
-      g_timeout_add(std::max((gulong)1, freeruninterval), to_next_free_run, NULL);
-    launch_next_freerun_timer_at_draw_end = false;
+  else{
+    if(animatetimeoutid) g_source_remove(animatetimeoutid);
+    draw_whole_event();
   }
 
   return FALSE;
@@ -714,7 +667,7 @@ static gboolean draw_event(GtkWidget *widg, GdkEventExpose * ee,
 // GTK main loop.
 static gboolean draw_event_from_timer(__attribute__((unused)) gpointer data)
 {
-  draw_event(edarea, NULL, NULL);
+  draw_whole_event();
   return FALSE; // don't call me again
 }
 
@@ -758,7 +711,7 @@ static gboolean prefetch_an_event(__attribute__((unused)) gpointer data)
 {
   if(ghave_read_all) return FALSE; // don't call this again
 
-  if(animating || gtk_events_pending()) return TRUE;
+  if(gtk_events_pending()) return TRUE;
 
   // exit GTK event loop to get another event from art
   prefetching = true;
@@ -769,7 +722,6 @@ static gboolean prefetch_an_event(__attribute__((unused)) gpointer data)
 // Why are you always preparing?  You're always preparing! Just go!
 static void prepare_to_swich_events()
 {
-  cancel_draw = true;
   active_cell = active_plane = -1;
 }
 
@@ -780,7 +732,7 @@ static void to_next(__attribute__((unused)) GtkWidget * widget,
   prepare_to_swich_events();
   const bool * const forward = (const bool * const)data;
   if(get_event((*forward)?1:-1))
-    draw_event(edarea, NULL, NULL);
+    handle_event();
 }
 
 // Called to move us the next event while free running
@@ -853,14 +805,18 @@ static void getuserevent()
     gevi += (forward?1:-1);
 
   prepare_to_swich_events();
-  draw_event(edarea, NULL, NULL);
+  draw_whole_event();
 }
 
 // Handle the user clicking the "run freely" check box.
 static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
+
   free_running = GTK_TOGGLE_BUTTON(w)->active;
+  if(free_running)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(animate_checkbox), FALSE);
+
   if(free_running){
     // Do not call g_timeout_add with an interval of zero, since that seems
     // to be a special case that causes the function to be run repeatedly
@@ -887,20 +843,23 @@ static void toggle_cum_ani(GtkWidget * w,
 {
   cumulative_animation = GTK_TOGGLE_BUTTON(w)->active;
 
-  // Must note that we've switched to trigger a full redraw
-  if(cumulative_animation) user_action_requires_redraw = true;
+  // Redraw from the beginning to the current tick
+  if(cumulative_animation){
+    DRAWPARS drawpars;
+    drawpars.firsttick = theevents[gevi].mintick;
+    drawpars.lasttick  = currentmaxtick;
+    drawpars.redraw = true;
+    draw_event(&drawpars);
+  }
 }
 
 // Handle the user clicking the "animate" check box.
 static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
-  // Schedule the draw for the next time the main event loop runs instead of
-  // drawing immediately because otherwise, the checkbox doesn't appear checked
-  // until the user moves the mouse off of it.  I don't really understand how
-  // the problem comes about, but this fixes it.  It is not a problem for
-  // any of the other checkboxes.
-  g_timeout_add(0, draw_event_from_timer, NULL);
+  if(animate)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox), FALSE);
+  handle_event();
 }
 
 static void restart_animation(__attribute__((unused)) GtkWidget * w,
@@ -910,14 +869,13 @@ static void restart_animation(__attribute__((unused)) GtkWidget * w,
   // user wants animation.
   animate = true;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(animate_checkbox), TRUE);
-  g_timeout_add(0, draw_event_from_timer, NULL);
+  handle_event();
 }
 
 // Convert the abstract "speed" number from the user into a delay.
 static void set_freeruninterval(const int speednum)
 {
-  switch(speednum < 0?0:speednum > 11?11:speednum){
-    case  0: freeruninterval = G_MAXULONG; break;
+  switch(speednum < 1?1:speednum > 11?11:speednum){
     case  1: freeruninterval = (int)pow(10, 5.0); break;
     case  2: freeruninterval = (int)pow(10, 4.5); break;
     case  3: freeruninterval = (int)pow(10, 4.0); break;
@@ -935,10 +893,7 @@ static void set_freeruninterval(const int speednum)
 static void adjusttick(GtkWidget * wg,
                         __attribute__((unused)) const gpointer dt)
 {
-  currenttick = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
-  user_action_requires_redraw = true;
-  user_set_currenttick = true;
-  g_timeout_add(0, draw_event_from_timer, NULL);
+  currentmaxtick = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
 }
 
 // Respond to changes in the spin button for animation/free running speed
@@ -947,27 +902,16 @@ static void adjustspeed(GtkWidget * wg,
 {
   set_freeruninterval(gtk_adjustment_get_value(GTK_ADJUSTMENT(wg)));
 
-  // If we are neither animating nor free running, we're done.
-  // If we are animating but not free running, we're also done.
-  if(!free_running) return;
-
   if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
-
-  // If we are free running, but not animating, we can (and must) fire off
-  // the timer for the next event here.
-  if(!animating)
+  if(free_running)
     freeruntimeoutid =
       g_timeout_add(std::max((gulong)1,freeruninterval), to_next_free_run, NULL);
 
-  // If we are animating and free running, things are tricky.  We want
-  // to continue the animation at the new speed, but we can't fire off
-  // the timer for the next free-run event, or else it might start in the
-  // middle of the current event.
-  //
-  // Instead set a flag that a new timer is needed once the current
-  // animation has finished.
-  else
-    launch_next_freerun_timer_at_draw_end = true;
+  if(animatetimeoutid) g_source_remove(animatetimeoutid);
+  if(animate)
+    animatetimeoutid =
+      g_timeout_add(std::max(1, (int)(freeruninterval*0.03)),
+                    animation_step, NULL);
 }
 
 // Called when the window is resized or moved. The buttons don't redraw
@@ -997,7 +941,7 @@ static void close_window()
 static void setup()
 {
   gtk_init(NULL, NULL);
-  GtkWidget * win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(win),
                        "NOE: New nOva Event viewer");
   g_signal_connect(win, "delete-event", G_CALLBACK(close_window), 0);
@@ -1005,7 +949,7 @@ static void setup()
   edarea = gtk_drawing_area_new();
   setboxes();
   g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
-  g_signal_connect(edarea,"expose-event",G_CALLBACK(draw_event),NULL);
+  g_signal_connect(edarea,"expose-event",G_CALLBACK(redraw_event),NULL);
   g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
                                 | GDK_POINTER_MOTION_MASK);
@@ -1055,7 +999,7 @@ static void setup()
   /* speed spin button */
   const int initialspeednum = 5;
   GtkObject * const speedadj = gtk_adjustment_new
-    (initialspeednum, 0, 11, 1, 1, 0);
+    (initialspeednum, 1, 11, 1, 1, 0);
   set_freeruninterval(initialspeednum);
   g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
 
@@ -1133,7 +1077,7 @@ static void setup()
   gtk_widget_show_all(win);
 
   get_event(0);
-  draw_event(edarea, NULL, NULL);
+  draw_whole_event();
 
   // This is a hack that gets all objects drawn fully. It seems that the window
   // initially getting set to the size of the ND and then resized to the size
