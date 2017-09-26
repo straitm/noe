@@ -34,8 +34,10 @@ Code style:
 #include "event.h"
 
 struct DRAWPARS{
+  // The ticks to draw right now, typically just the minumum needed
+  // and not the whole range that is visible.
   int32_t firsttick, lasttick;
-  bool redraw;
+  bool clear;
 };
 
 static const int viewsep = 8; // vertical cell widths between x and y views
@@ -69,8 +71,8 @@ static GtkWidget * maxtickslider = NULL;
 /* Running flags.  */
 static bool ghave_read_all = false;
 static bool prefetching = false;
+static bool adjusttick_callback_inhibit = false; // XXX ug
 
-static int currentmintick = 0, currentmaxtick = 0;
 static int active_plane = -1, active_cell = -1;
 
 /* Ticky boxes flags */
@@ -255,14 +257,11 @@ static void draw_background(cairo_t * cr)
   }
 }
 
-static bool visible_hit_for_animation(const int32_t tdc)
+static bool visible_hit(const int32_t tdc)
 {
-  if(!animate) return true;
-
-  if(cumulative_animation) return tdc <= currentmaxtick;
-
-  return tdc <= currentmaxtick &&
-         tdc >= currentmaxtick - (TDCSTEP-1);
+  // XXX the acceptance range of TDCSTEP isn't well integrated
+  return tdc <= theevents[gevi].current_maxtick &&
+         tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
 }
 
 // Given the plane, returns the left side of the screen position in Cairo
@@ -366,7 +365,7 @@ static int screen_to_cell(const int x, const int y)
   int mindist = 9999, closestcell = -1;
   for(unsigned int i = 0; i < THEhits.size(); i++){
     if(THEhits[i].plane != plane) continue;
-    if(!visible_hit_for_animation(THEhits[i].tdc)) continue;
+    if(!visible_hit(THEhits[i].tdc)) continue;
     const int dist = abs(THEhits[i].cell - c);
     if(dist < mindist){
       mindist = dist;
@@ -430,16 +429,24 @@ static void set_eventn_status0()
 // Set second status line, which reports on timing information
 static void set_eventn_status1()
 {
-  noeevent * THEevent = &theevents[gevi];
+  noeevent & E = theevents[gevi];
 
   char status1[MAXSTATUS];
 
   int pos = snprintf(status1, MAXSTATUS, "Ticks %s%'d through %'d.  ",
-             BOTANY_BAY_OH_INT(THEevent->mintick), THEevent->maxtick);
-  pos += snprintf(status1+pos, MAXSTATUS-pos,
-      "Showing %s%.3f through %s%.3f μ)",
-      BOTANY_BAY_OH_NO(currentmintick/64.),
-      BOTANY_BAY_OH_NO(currentmaxtick/64.));
+             BOTANY_BAY_OH_INT(E.mintick), E.maxtick);
+  if(E.current_mintick != E.current_maxtick)
+    pos += snprintf(status1+pos, MAXSTATUS-pos,
+      "Showing ticks %s%d through %s%d (%s%.3f through %s%.3f μs)",
+      BOTANY_BAY_OH_INT(E.current_mintick),
+      BOTANY_BAY_OH_INT(E.current_maxtick),
+      BOTANY_BAY_OH_NO( E.current_mintick/64.),
+      BOTANY_BAY_OH_NO( E.current_maxtick/64.));
+  else
+    pos += snprintf(status1+pos, MAXSTATUS-pos,
+      "Showing tick %s%d (%s%.3f μs)",
+      BOTANY_BAY_OH_INT(E.current_maxtick),
+      BOTANY_BAY_OH_NO( E.current_maxtick/64.));
 
   set_status(1, status1);
 }
@@ -506,7 +513,7 @@ static void set_eventn_status()
 
 // Draw all the hits in the event that we need to draw, depending on
 // whether we are animating or have been exposed, etc.
-static void draw_hits(cairo_t * cr, const DRAWPARS * drawpars)
+static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
 {
   cairo_set_line_width(cr, 1.0);
 
@@ -575,27 +582,18 @@ static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
 
 // Draw a whole event, a range, or an animation frame, as dictated by
 // the DRAWPARS.
-static void draw_event(DRAWPARS * drawpars)
+static void draw_event(const DRAWPARS * const drawpars)
 {
   set_eventn_status();
   if(theevents.empty()) return;
 
-  noeevent * THEevent = &theevents[gevi];
-
-  gtk_spin_button_set_range(GTK_SPIN_BUTTON(maxtickslider),
-                            THEevent->mintick, THEevent->maxtick);
-  gtk_spin_button_set_range(GTK_SPIN_BUTTON(mintickslider),
-                            THEevent->mintick, THEevent->maxtick);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(maxtickslider), drawpars->lasttick);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(mintickslider), drawpars->firsttick);
-
-  if(!isfd && THEevent->fdlike) setfd();
+  if(!isfd && theevents[gevi].fdlike) setfd();
 
   cairo_t * cr = gdk_cairo_create(edarea->window);
   cairo_push_group(cr);
 
   // Do not blank the display in the middle of an animation unless necessary
-  if(drawpars->redraw) draw_background(cr);
+  if(drawpars->clear) draw_background(cr);
 
   draw_hits(cr, drawpars);
 
@@ -609,56 +607,60 @@ static gboolean redraw_event(__attribute__((unused)) GtkWidget *widg,
                              __attribute__((unused)) gpointer data)
 {
   DRAWPARS drawpars;
-  drawpars.firsttick = currentmintick;
-  drawpars.lasttick  = currentmaxtick;
-  drawpars.redraw = true;
+  drawpars.firsttick = theevents[gevi].current_mintick;
+  drawpars.lasttick  = theevents[gevi].current_maxtick;
+  drawpars.clear = true;
   draw_event(&drawpars);
 
   return FALSE;
 }
 
-static gboolean draw_whole_event()
+static void draw_whole_user_event()
 {
-  DRAWPARS drawpars;
-  currentmintick = drawpars.firsttick = theevents[gevi].mintick;
-  currentmaxtick = drawpars.lasttick  = theevents[gevi].maxtick;
-  drawpars.redraw = true;
-  draw_event(&drawpars);
+  theevents[gevi].current_mintick = theevents[gevi].user_mintick;
+  theevents[gevi].current_maxtick = theevents[gevi].user_maxtick;
 
-  return FALSE;
+  DRAWPARS drawpars;
+  drawpars.firsttick = theevents[gevi].current_mintick;
+  drawpars.lasttick  = theevents[gevi].current_maxtick;
+  drawpars.clear = true;
+  draw_event(&drawpars);
 }
 
 static gboolean animation_step(__attribute__((unused)) gpointer data)
 {
-  // The obvious part: always update the max tick
-  currentmaxtick += TDCSTEP;
-
-  // The non-obvious part: If the user has unhinged the min tick from
-  // the beginning of the event, have it follow along
-  if(currentmintick != theevents[gevi].mintick)
-    currentmintick += TDCSTEP;
-
-  if(currentmintick > currentmaxtick) currentmintick = currentmaxtick;
-
-  if(!cumulative_animation) currentmintick = currentmaxtick;
+  noeevent & E = theevents[gevi];
 
   DRAWPARS drawpars;
-
   // Must redraw if we are just starting the animation, or if it is
   // non-cumulative, i.e. the old hits have to be re-hidden
-  drawpars.redraw =
-    currentmaxtick == theevents[gevi].mintick || !cumulative_animation;
+  drawpars.clear = E.current_maxtick == theevents[gevi].user_mintick ||
+                   !cumulative_animation;
 
-  drawpars.firsttick = currentmintick;
-  drawpars.lasttick  = currentmaxtick;
+  E.current_maxtick += TDCSTEP;
+
+  // Necessary to make visible_hit() work.  Otherwise, hits incorrectly
+  // become visible when moused over.
+  if(!cumulative_animation) E.current_mintick = E.current_maxtick;
+
+  drawpars.firsttick = cumulative_animation?E.current_mintick:E.current_maxtick;
+  drawpars.lasttick  = E.current_maxtick;
   draw_event(&drawpars);
-  return animate && currentmaxtick != theevents[gevi].maxtick;
+  return animate && E.current_maxtick < theevents[gevi].user_maxtick;
 }
 
 static gboolean handle_event()
 {
+  noeevent & E = theevents[gevi];
+  adjusttick_callback_inhibit = true;
+  gtk_spin_button_set_range(GTK_SPIN_BUTTON(maxtickslider), E.mintick, E.maxtick);
+  gtk_spin_button_set_range(GTK_SPIN_BUTTON(mintickslider), E.mintick, E.maxtick);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(maxtickslider), E.user_maxtick);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(mintickslider), E.user_mintick);
+  adjusttick_callback_inhibit = false;
+
   if(animate){
-    currentmintick = currentmaxtick = theevents[gevi].mintick;
+    E.current_maxtick = E.current_mintick = E.user_mintick;
     if(animatetimeoutid) g_source_remove(animatetimeoutid);
 
     // Do one step immediately to be responsive to the user even if the
@@ -671,7 +673,8 @@ static gboolean handle_event()
   }
   else{
     if(animatetimeoutid) g_source_remove(animatetimeoutid);
-    draw_whole_event();
+    animatetimeoutid = 0;
+    draw_whole_user_event();
   }
 
   return FALSE;
@@ -681,7 +684,7 @@ static gboolean handle_event()
 // GTK main loop.
 static gboolean draw_event_from_timer(__attribute__((unused)) gpointer data)
 {
-  draw_whole_event();
+  draw_whole_user_event();
   return FALSE; // don't call me again
 }
 
@@ -819,7 +822,7 @@ static void getuserevent()
     gevi += (forward?1:-1);
 
   prepare_to_swich_events();
-  draw_whole_event();
+  draw_whole_user_event();
 }
 
 // Handle the user clicking the "run freely" check box.
@@ -859,10 +862,18 @@ static void toggle_cum_ani(GtkWidget * w,
   // If switching to cumulative, need to draw all the previous hits.  If
   // switching away, need to blank them all out.  In either case, don't wait
   // until the next animation step, because that appears laggy for the user.
+  // TODO: make that actually work.
   DRAWPARS drawpars;
-  drawpars.firsttick = theevents[gevi].mintick;
-  drawpars.lasttick  = currentmaxtick;
-  drawpars.redraw = !cumulative_animation;
+  if(cumulative_animation){
+    drawpars.firsttick = theevents[gevi].user_mintick;
+    drawpars.lasttick  = theevents[gevi].current_maxtick;
+  }
+  else{
+    theevents[gevi].current_mintick = theevents[gevi].current_maxtick;
+    drawpars.firsttick = theevents[gevi].current_mintick;
+    drawpars.lasttick  = theevents[gevi].current_maxtick;
+  }
+  drawpars.clear = !cumulative_animation;
   draw_event(&drawpars);
 }
 
@@ -888,6 +899,7 @@ static void restart_animation(__attribute__((unused)) GtkWidget * w,
 // Convert the abstract "speed" number from the user into a delay.
 static void set_freeruninterval(const int speednum)
 {
+  // TODO: Make speed 11 animation much faster
   switch(speednum < 1?1:speednum > 11?11:speednum){
     case  1: freeruninterval = (int)pow(10, 5.0); break;
     case  2: freeruninterval = (int)pow(10, 4.5); break;
@@ -899,21 +911,39 @@ static void set_freeruninterval(const int speednum)
     case  8: freeruninterval = (int)pow(10, 1.5); break;
     case  9: freeruninterval = (int)pow(10, 1.0); break;
     case 10: freeruninterval = (int)pow(10, 0.5); break;
-    case 11: freeruninterval = 0; break;
+    case 11: freeruninterval = (int)pow(10, 0.0); break;
   }
 }
 
-static void adjusttick(GtkWidget * wg,
-                        const gpointer dt)
+static void adjusttick(GtkWidget * wg, const gpointer dt)
 {
-  (dt != NULL && *(bool *)dt?currentmaxtick:currentmintick)
+  if(adjusttick_callback_inhibit) return;
+
+  noeevent & E = theevents[gevi];
+
+  (dt != NULL && *(bool *)dt? E.user_maxtick: E.user_mintick)
     = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
 
-  // Must redraw now, especially if animation is off
+  const int32_t oldcurrent_maxtick = E.current_maxtick;
+  const int32_t oldcurrent_mintick = E.current_mintick;
+  if(animate){
+    // TODO: more elegantly handle the case that animation is on, but
+    // the animation has completed.
+    E.current_maxtick = std::min(E.current_maxtick, E.user_maxtick);
+    E.current_mintick = std::max(E.current_mintick, E.user_mintick);
+  }
+  else{
+    E.current_maxtick = E.user_maxtick;
+    E.current_mintick = E.user_mintick;
+  }
+
   DRAWPARS drawpars;
-  drawpars.firsttick = currentmintick;
-  drawpars.lasttick  = currentmaxtick;
-  drawpars.redraw = true;
+  drawpars.clear = E.current_maxtick < oldcurrent_maxtick ||
+                   E.current_mintick > oldcurrent_mintick;
+
+  // TODO can optimize this to only draw the new range
+  drawpars.firsttick = E.current_mintick;
+  drawpars.lasttick  = E.current_maxtick;
   draw_event(&drawpars);
 }
 
@@ -933,20 +963,29 @@ static void adjustspeed(GtkWidget * wg,
     animatetimeoutid =
       g_timeout_add(std::max(1, (int)(freeruninterval*0.03)),
                     animation_step, NULL);
+  else
+    animatetimeoutid = 0;
 }
 
 // Called when the window is resized or moved. The buttons don't redraw
-// themselves when the window is resized, so we have to get it done. I don't
-// want to do this when it is resized, but how can I tell which it is? I also
+// themselves when the window is resized, so we have to get it done. I
 // don't really want to call this 100 times when a user slowly resizes a window
 // that takes a long time to draw, but nor do I want to write a complex system
 // for dealing with that case...
 static gboolean redraw_window(GtkWidget * win,
-                              __attribute__((unused)) GdkEventConfigure * event,
+                              GdkEventConfigure * event,
                               __attribute__((unused)) gpointer d)
 {
-  gtk_widget_queue_draw(win);
-  return FALSE; // *do* propagate this to children
+  static int oldwidth = event->width, oldheight = event->height;
+  static bool first = true;
+  const bool need_redraw =
+    first || event->width > oldwidth || event->height > oldheight;
+  first = false;
+  oldwidth = event->width, oldheight = event->height;
+
+  if(need_redraw) gtk_widget_queue_draw(win);
+
+  return !need_redraw; // FALSE means *do* propagate this to children
 }
 
 static void close_window()
@@ -1120,7 +1159,7 @@ static void setup()
   gtk_widget_show_all(win);
 
   get_event(0);
-  draw_whole_event();
+  handle_event();
 
   // This is a hack that gets all objects drawn fully. It seems that the window
   // initially getting set to the size of the ND and then resized to the size
