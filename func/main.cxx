@@ -48,7 +48,7 @@ static const int MAXSTATUS = 1024;
 // Let's see.  I believe both detectors read out in increments of 4 TDC units,
 // but the FD is multiplexed whereas the ND isn't, so any given channel at the
 // FD can only report every 4 * 2^N TDC units, where I think N = 2.
-static const int TDCSTEP = 4;
+static int TDCSTEP = 4;
 
 /* The events and the current event index in the vector */
 extern std::vector<noeevent> theevents;
@@ -87,6 +87,7 @@ static bool cumulative_animation = true;
 static bool free_running = false;
 
 static gulong freeruninterval = 0; // ms.  Immediately overwritten.
+static gulong animationinterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
 static gulong animatetimeoutid = 0;
 
@@ -521,7 +522,8 @@ static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
 
   std::sort(THEhits.begin(), THEhits.end(), by_charge);
 
-  const bool bigevent = THEhits.size() > 50000;
+  const int big = 100000;
+  const bool bigevent = THEhits.size() > big;
 
   for(unsigned int i = 0; i < THEhits.size(); i++){
     const hit & thishit = THEhits[i];
@@ -529,7 +531,7 @@ static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
     if(thishit.tdc < drawpars->firsttick ||
        thishit.tdc > drawpars->lasttick) continue;
 
-    if(bigevent && i%50000 == 0)
+    if(bigevent && i%big == 0)
       set_eventn_status2progress(i, THEhits.size());
 
     draw_hit(cr, thishit);
@@ -547,6 +549,10 @@ static void change_highlighted_cell(GtkWidget * widg,
   cairo_t * cr = gdk_cairo_create(widg->window);
   cairo_set_line_width(cr, 1.0);
   std::vector<hit> & THEhits = theevents[gevi].hits;
+
+  // We may need to find any number of hits since more than one hit
+  // can be in the same cell.  It is not guaranteed that the same hit
+  // ends up visible, but I'm just going to live with that.
   for(unsigned int i = 0; i < THEhits.size(); i++){
     hit & thishit = THEhits[i];
     if((thishit.plane == oldactive_plane && thishit.cell == oldactive_cell) ||
@@ -596,6 +602,7 @@ static void draw_event(const DRAWPARS * const drawpars)
   if(drawpars->clear) draw_background(cr);
 
   draw_hits(cr, drawpars);
+  set_eventn_status(); // overwrite anything that draw_hits did
 
   cairo_pop_group_to_source(cr);
   cairo_paint(cr);
@@ -668,7 +675,7 @@ static gboolean handle_event()
     animation_step(NULL);
 
     animatetimeoutid =
-      g_timeout_add(std::max(1, (int)(freeruninterval*0.03)),
+      g_timeout_add(std::max(1, (int)animationinterval),
                     animation_step, NULL);
   }
   else{
@@ -883,6 +890,8 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
   animate = GTK_TOGGLE_BUTTON(w)->active;
   if(animate)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox), FALSE);
+  else
+    TDCSTEP = 1;
   handle_event();
 }
 
@@ -897,21 +906,23 @@ static void restart_animation(__attribute__((unused)) GtkWidget * w,
 }
 
 // Convert the abstract "speed" number from the user into a delay.
-static void set_freeruninterval(const int speednum)
+static void set_intervals(const int speednum)
 {
-  // TODO: Make speed 11 animation much faster
+  freeruninterval   = (int)pow(10, 6.5 - speednum/2.0);
+  animationinterval = (int)pow(10, 4.0 - speednum/2.0);
+
   switch(speednum < 1?1:speednum > 11?11:speednum){
-    case  1: freeruninterval = (int)pow(10, 5.0); break;
-    case  2: freeruninterval = (int)pow(10, 4.5); break;
-    case  3: freeruninterval = (int)pow(10, 4.0); break;
-    case  4: freeruninterval = (int)pow(10, 3.5); break;
-    case  5: freeruninterval = (int)pow(10, 3.0); break;
-    case  6: freeruninterval = (int)pow(10, 2.5); break;
-    case  7: freeruninterval = (int)pow(10, 2.0); break;
-    case  8: freeruninterval = (int)pow(10, 1.5); break;
-    case  9: freeruninterval = (int)pow(10, 1.0); break;
-    case 10: freeruninterval = (int)pow(10, 0.5); break;
-    case 11: freeruninterval = (int)pow(10, 0.0); break;
+    case  1: TDCSTEP =   1; break;
+    case  2: TDCSTEP =   2; break;
+    case  3: TDCSTEP =   4; break;
+    case  4: TDCSTEP =   4; break;
+    case  5: TDCSTEP =   4; break;
+    case  6: TDCSTEP =   8; break;
+    case  7: TDCSTEP =   8; break;
+    case  8: TDCSTEP =   8; break;
+    case  9: TDCSTEP =  16; break;
+    case 10: TDCSTEP =  32; break;
+    case 11: TDCSTEP = 128; break;
   }
 }
 
@@ -951,7 +962,7 @@ static void adjusttick(GtkWidget * wg, const gpointer dt)
 static void adjustspeed(GtkWidget * wg,
                         __attribute__((unused)) const gpointer dt)
 {
-  set_freeruninterval(gtk_adjustment_get_value(GTK_ADJUSTMENT(wg)));
+  set_intervals(gtk_adjustment_get_value(GTK_ADJUSTMENT(wg)));
 
   if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
   if(free_running)
@@ -961,7 +972,7 @@ static void adjustspeed(GtkWidget * wg,
   if(animatetimeoutid) g_source_remove(animatetimeoutid);
   if(animate)
     animatetimeoutid =
-      g_timeout_add(std::max(1, (int)(freeruninterval*0.03)),
+      g_timeout_add(std::max(1, (int)animationinterval),
                     animation_step, NULL);
   else
     animatetimeoutid = 0;
@@ -1017,10 +1028,10 @@ static GtkWidget * make_tickslider(const bool ismax)
 // speed spin button
 static GtkWidget * make_speedslider()
 {
-  const int initialspeednum = 5;
+  const int initialspeednum = 6;
   GtkObject * const speedadj = gtk_adjustment_new
     (initialspeednum, 1, 11, 1, 1, 0);
-  set_freeruninterval(initialspeednum);
+  set_intervals(initialspeednum);
   g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
 
   GtkWidget * const speedslider
