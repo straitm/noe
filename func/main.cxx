@@ -262,7 +262,7 @@ static bool visible_hit_for_animation(const int32_t tdc)
   if(cumulative_animation) return tdc <= currentmaxtick;
 
   return tdc <= currentmaxtick &&
-         tdc >= currentmaxtick - TDCSTEP-1;
+         tdc >= currentmaxtick - (TDCSTEP-1);
 }
 
 // Given the plane, returns the left side of the screen position in Cairo
