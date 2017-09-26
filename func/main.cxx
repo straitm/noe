@@ -63,7 +63,8 @@ static GtkWidget * animate_checkbox = NULL,
                  * freerun_checkbox = NULL;
 static GtkWidget * ueventbut = NULL;
 static GtkWidget * ueventbox = NULL;
-static GtkWidget * tickslider = NULL;
+static GtkWidget * mintickslider = NULL;
+static GtkWidget * maxtickslider = NULL;
 
 /* Running flags.  */
 static bool ghave_read_all = false;
@@ -589,9 +590,12 @@ static void draw_event(DRAWPARS * drawpars)
 
   noeevent * THEevent = &theevents[gevi];
 
-  gtk_spin_button_set_range(GTK_SPIN_BUTTON(tickslider),
+  gtk_spin_button_set_range(GTK_SPIN_BUTTON(maxtickslider),
                             THEevent->mintick, THEevent->maxtick);
-  gtk_spin_button_set_value(GTK_SPIN_BUTTON(tickslider), drawpars->lasttick);
+  gtk_spin_button_set_range(GTK_SPIN_BUTTON(mintickslider),
+                            THEevent->mintick, THEevent->maxtick);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(maxtickslider), drawpars->lasttick);
+  gtk_spin_button_set_value(GTK_SPIN_BUTTON(mintickslider), drawpars->firsttick);
 
   if(!isfd && THEevent->fdlike) setfd();
 
@@ -891,9 +895,17 @@ static void set_freeruninterval(const int speednum)
 }
 
 static void adjusttick(GtkWidget * wg,
-                        __attribute__((unused)) const gpointer dt)
+                        const gpointer dt)
 {
-  currentmaxtick = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
+  (dt != NULL && *(bool *)dt?currentmaxtick:currentmintick)
+    = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
+
+  // Must redraw now, especially if animation is off
+  DRAWPARS drawpars;
+  drawpars.firsttick = currentmintick;
+  drawpars.lasttick  = currentmaxtick;
+  drawpars.redraw = true;
+  draw_event(&drawpars);
 }
 
 // Respond to changes in the spin button for animation/free running speed
@@ -936,14 +948,80 @@ static void close_window()
   _exit(0);
 }
 
+/**********************************************************************/
+/*                          Widget setup                              */
+/**********************************************************************/
+
+// tick select spin button
+static GtkWidget * make_tickslider(const bool ismax)
+{
+  const int initialticknum = 0;
+  GtkObject * const tickadj = gtk_adjustment_new
+    (initialticknum, 0, 1000, 1, 10, 0);
+  GtkWidget * tickslider = gtk_spin_button_new(GTK_ADJUSTMENT(tickadj), 10, 0);
+  g_signal_connect(tickadj, "value_changed", G_CALLBACK(adjusttick),
+                   new bool(ismax));
+  gtk_entry_set_max_length (GTK_ENTRY(tickslider), 6);
+  gtk_entry_set_width_chars(GTK_ENTRY(tickslider), 6);
+  return tickslider;
+}
+
+// speed spin button
+static GtkWidget * make_speedslider()
+{
+  const int initialspeednum = 5;
+  GtkObject * const speedadj = gtk_adjustment_new
+    (initialspeednum, 1, 11, 1, 1, 0);
+  set_freeruninterval(initialspeednum);
+  g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
+
+  GtkWidget * const speedslider
+    = gtk_spin_button_new(GTK_ADJUSTMENT(speedadj), 10, 0);
+  gtk_entry_set_max_length (GTK_ENTRY(speedslider), 2);
+  gtk_entry_set_width_chars(GTK_ENTRY(speedslider), 2);
+  return speedslider;
+}
+
+static GtkWidget * make_ticklabel(const bool ismax)
+{
+  GtkWidget * ticklabel = gtk_text_view_new();
+  GtkTextBuffer * ticklabeltext = gtk_text_buffer_new(0);
+  gtk_text_view_set_justification(GTK_TEXT_VIEW(ticklabel), GTK_JUSTIFY_CENTER);
+  const char * const ticklabelbuf = ismax?"Max Tick":"Min Tick";
+  gtk_text_buffer_set_text(ticklabeltext, ticklabelbuf, strlen(ticklabelbuf));
+  gtk_text_view_set_buffer(GTK_TEXT_VIEW(ticklabel), ticklabeltext);
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(ticklabel), false);
+  return ticklabel;
+}
+
+static GtkWidget * make_speedlabel()
+{
+  GtkWidget * speedlabel = gtk_text_view_new();
+  GtkTextBuffer * speedlabeltext = gtk_text_buffer_new(0);
+  gtk_text_view_set_justification(GTK_TEXT_VIEW(speedlabel), GTK_JUSTIFY_CENTER);
+  const char * const speedlabelbuf = "Speed";
+  gtk_text_buffer_set_text(speedlabeltext, speedlabelbuf, strlen(speedlabelbuf));
+  gtk_text_view_set_buffer(GTK_TEXT_VIEW(speedlabel), speedlabeltext);
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(speedlabel), false);
+  return speedlabel;
+}
+
+static GtkWidget * make_ueventbox()
+{
+  GtkWidget * ueventbox = gtk_entry_new();
+  gtk_entry_set_max_length(GTK_ENTRY(ueventbox), 20);//length of a int64
+  gtk_entry_set_width_chars(GTK_ENTRY(ueventbox), 5);
+  g_signal_connect(ueventbox, "activate", G_CALLBACK(getuserevent), NULL);
+  return ueventbox;
+}
+
 // Sets up the GTK window, add user event hooks, start the necessary
 // timer(s), draw the first event.
 static void setup()
 {
   gtk_init(NULL, NULL);
   win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title(GTK_WINDOW(win),
-                       "NOE: New nOva Event viewer");
+  gtk_window_set_title(GTK_WINDOW(win), "NOE: New nOva Event viewer");
   g_signal_connect(win, "delete-event", G_CALLBACK(close_window), 0);
 
   edarea = gtk_drawing_area_new();
@@ -978,85 +1056,41 @@ static void setup()
   GtkWidget * re_an_button = gtk_button_new_with_mnemonic("_Restart animation");
   g_signal_connect(re_an_button, "clicked", G_CALLBACK(restart_animation), NULL);
 
-  /* tick select spin button */
-  const int initialticknum = 0;
-  GtkObject * const tickadj = gtk_adjustment_new
-    (initialticknum, 0, 1000, 1, 10, 0);
-  tickslider = gtk_spin_button_new(GTK_ADJUSTMENT(tickadj), 10, 0);
-  g_signal_connect(tickadj, "value_changed", G_CALLBACK(adjusttick), NULL);
-  gtk_entry_set_max_length (GTK_ENTRY(tickslider), 6);
-  gtk_entry_set_width_chars(GTK_ENTRY(tickslider), 6);
-
-  GtkWidget * ticklabel = gtk_text_view_new();
-  GtkTextBuffer * ticklabeltext = gtk_text_buffer_new(0);
-  gtk_text_view_set_justification(GTK_TEXT_VIEW(ticklabel), GTK_JUSTIFY_CENTER);
-  const char * const ticklabelbuf = "Tick";
-  gtk_text_buffer_set_text(ticklabeltext, ticklabelbuf, strlen(ticklabelbuf));
-  gtk_text_view_set_buffer(GTK_TEXT_VIEW(ticklabel), ticklabeltext);
-  gtk_text_view_set_editable(GTK_TEXT_VIEW(ticklabel), false);
-
-
-  /* speed spin button */
-  const int initialspeednum = 5;
-  GtkObject * const speedadj = gtk_adjustment_new
-    (initialspeednum, 1, 11, 1, 1, 0);
-  set_freeruninterval(initialspeednum);
-  g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
-
-  GtkWidget * const speedslider
-    = gtk_spin_button_new(GTK_ADJUSTMENT(speedadj), 10, 0);
-  gtk_entry_set_max_length (GTK_ENTRY(speedslider), 2);
-  gtk_entry_set_width_chars(GTK_ENTRY(speedslider), 2);
-
-  GtkWidget * speedlabel = gtk_text_view_new();
-  GtkTextBuffer * speedlabeltext = gtk_text_buffer_new(0);
-  gtk_text_view_set_justification(GTK_TEXT_VIEW(speedlabel), GTK_JUSTIFY_CENTER);
-  const char * const speedlabelbuf = "Speed";
-  gtk_text_buffer_set_text(speedlabeltext, speedlabelbuf, strlen(speedlabelbuf));
-  gtk_text_view_set_buffer(GTK_TEXT_VIEW(speedlabel), speedlabeltext);
-  gtk_text_view_set_editable(GTK_TEXT_VIEW(speedlabel), false);
-
-
-  ueventbox = gtk_entry_new();
-  gtk_entry_set_max_length(GTK_ENTRY(ueventbox), 20);//length of a int64
-  gtk_entry_set_width_chars(GTK_ENTRY(ueventbox), 5);
-  g_signal_connect(ueventbox, "activate", G_CALLBACK(getuserevent), NULL);
+  maxtickslider                  = make_tickslider(true);
+  mintickslider                  = make_tickslider(false);
+  GtkWidget * const minticklabel = make_ticklabel(true);
+  GtkWidget * const maxticklabel = make_ticklabel(false);
+  GtkWidget * const speedslider  = make_speedslider();
+  GtkWidget * const speedlabel   = make_speedlabel();
+  ueventbox                      = make_ueventbox();
 
   ueventbut = gtk_button_new_with_mnemonic("_Go to event");
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
-
-  const int nrow = 3+NSTATBOXES, ncol = 10;
+  const int nrow = 3+NSTATBOXES, ncol = 11;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
-  {
-  int c = 0;
-  gtk_table_attach_defaults(GTK_TABLE(tab), prev,             c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), next,             c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), tickslider,       c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), animate_checkbox, c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), cum_ani_checkbox, c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), re_an_button,     c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), freerun_checkbox, c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), speedslider,      c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbox,        c, c+1, 0, 1); c++;
-  gtk_table_attach_defaults(GTK_TABLE(tab), ueventbut,        c, c+1, 0, 1); c++;
-  }
+  GtkWidget * top_row_widgets[ncol] = {
+    prev, next, mintickslider, maxtickslider, animate_checkbox, cum_ani_checkbox,
+    re_an_button, freerun_checkbox, speedslider, ueventbox, ueventbut};
 
-  for(int i = 0; i < ncol; i++){
-    if(i == 2){
-      gtk_table_attach_defaults(GTK_TABLE(tab), ticklabel,  i, i+1, 1, 2);
-    }
-    if(i == 6){
-      gtk_table_attach_defaults(GTK_TABLE(tab), speedlabel, i, i+1, 1, 2);
+  GtkWidget * second_row_widgets[ncol] = {
+    NULL, NULL, minticklabel, maxticklabel, NULL,
+    NULL, NULL, speedlabel, NULL, NULL, NULL};
+
+  for(int c = 0; c < ncol; c++){
+    gtk_table_attach_defaults(GTK_TABLE(tab), top_row_widgets[c], c, c+1, 0, 1);
+
+    if(second_row_widgets[c] != NULL){
+      gtk_table_attach_defaults(GTK_TABLE(tab),second_row_widgets[c],c,c+1,1,2);
     }
     else{
       // Have to put a blank text box in each table cell or else the
       // background color is inconsistent.
       GtkWidget * blanklabel = gtk_text_view_new();
       gtk_text_view_set_editable(GTK_TEXT_VIEW(blanklabel), false);
-      gtk_table_attach_defaults(GTK_TABLE(tab), blanklabel, i, i+1, 1, 2);
+      gtk_table_attach_defaults(GTK_TABLE(tab), blanklabel, c, c+1, 1, 2);
     }
   }
 
