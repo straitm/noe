@@ -436,18 +436,10 @@ static void set_eventn_status1()
 
   int pos = snprintf(status1, MAXSTATUS, "Ticks %s%'d through %'d.  ",
              BOTANY_BAY_OH_INT(THEevent->mintick), THEevent->maxtick);
-  if(!animate)
-    pos += snprintf(status1+pos, MAXSTATUS-pos, "Showing all ticks");
-  else if(cumulative_animation)
-    pos += snprintf(status1+pos, MAXSTATUS-pos,
-      "Showing ticks %s%d through %s%d (%s%.3f through %s%.3f μs)",
-      BOTANY_BAY_OH_INT(currentmintick), BOTANY_BAY_OH_INT(currentmaxtick),
+  pos += snprintf(status1+pos, MAXSTATUS-pos,
+      "Showing %s%.3f through %s%.3f μ)",
       BOTANY_BAY_OH_NO(currentmintick/64.),
       BOTANY_BAY_OH_NO(currentmaxtick/64.));
-  else
-    pos += snprintf(status1+pos, MAXSTATUS-pos,
-      "Showing tick %s%d (%s%.3f μs)",
-      BOTANY_BAY_OH_INT(currentmaxtick), BOTANY_BAY_OH_NO(currentmaxtick/64.));
 
   set_status(1, status1);
 }
@@ -638,11 +630,24 @@ static gboolean draw_whole_event()
 
 static gboolean animation_step(__attribute__((unused)) gpointer data)
 {
-  DRAWPARS drawpars;
-  drawpars.redraw = currentmaxtick ==
-    theevents[gevi].mintick || !cumulative_animation;
+  // The obvious part: always update the max tick
   currentmaxtick += TDCSTEP;
+
+  // The non-obvious part: If the user has unhinged the min tick from
+  // the beginning of the event, have it follow along
+  if(currentmintick != theevents[gevi].mintick)
+    currentmintick += TDCSTEP;
+
+  if(currentmintick > currentmaxtick) currentmintick = currentmaxtick;
+
   if(!cumulative_animation) currentmintick = currentmaxtick;
+
+  DRAWPARS drawpars;
+
+  // Must redraw if we are just starting the animation, or if it is
+  // non-cumulative, i.e. the old hits have to be re-hidden
+  drawpars.redraw =
+    currentmaxtick == theevents[gevi].mintick || !cumulative_animation;
 
   drawpars.firsttick = currentmintick;
   drawpars.lasttick  = currentmaxtick;
@@ -655,6 +660,11 @@ static gboolean handle_event()
   if(animate){
     currentmintick = currentmaxtick = theevents[gevi].mintick;
     if(animatetimeoutid) g_source_remove(animatetimeoutid);
+
+    // Do one step immediately to be responsive to the user even if the
+    // speed is set very slow
+    animation_step(NULL);
+
     animatetimeoutid =
       g_timeout_add(std::max(1, (int)(freeruninterval*0.03)),
                     animation_step, NULL);
@@ -816,7 +826,6 @@ static void getuserevent()
 static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
-
   free_running = GTK_TOGGLE_BUTTON(w)->active;
   if(free_running)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(animate_checkbox), FALSE);
@@ -847,14 +856,14 @@ static void toggle_cum_ani(GtkWidget * w,
 {
   cumulative_animation = GTK_TOGGLE_BUTTON(w)->active;
 
-  // Redraw from the beginning to the current tick
-  if(cumulative_animation){
-    DRAWPARS drawpars;
-    drawpars.firsttick = theevents[gevi].mintick;
-    drawpars.lasttick  = currentmaxtick;
-    drawpars.redraw = true;
-    draw_event(&drawpars);
-  }
+  // If switching to cumulative, need to draw all the previous hits.  If
+  // switching away, need to blank them all out.  In either case, don't wait
+  // until the next animation step, because that appears laggy for the user.
+  DRAWPARS drawpars;
+  drawpars.firsttick = theevents[gevi].mintick;
+  drawpars.lasttick  = currentmaxtick;
+  drawpars.redraw = !cumulative_animation;
+  draw_event(&drawpars);
 }
 
 // Handle the user clicking the "animate" check box.
@@ -1058,8 +1067,8 @@ static void setup()
 
   maxtickslider                  = make_tickslider(true);
   mintickslider                  = make_tickslider(false);
-  GtkWidget * const minticklabel = make_ticklabel(true);
-  GtkWidget * const maxticklabel = make_ticklabel(false);
+  GtkWidget * const maxticklabel = make_ticklabel(true);
+  GtkWidget * const minticklabel = make_ticklabel(false);
   GtkWidget * const speedslider  = make_speedslider();
   GtkWidget * const speedlabel   = make_speedlabel();
   ueventbox                      = make_ueventbox();
@@ -1077,7 +1086,7 @@ static void setup()
 
   GtkWidget * second_row_widgets[ncol] = {
     NULL, NULL, minticklabel, maxticklabel, NULL,
-    NULL, NULL, speedlabel, NULL, NULL, NULL};
+    NULL, NULL, NULL, speedlabel, NULL, NULL};
 
   for(int c = 0; c < ncol; c++){
     gtk_table_attach_defaults(GTK_TABLE(tab), top_row_widgets[c], c, c+1, 0, 1);
