@@ -931,7 +931,7 @@ static void set_intervals(const int speednum)
   // higher exclusively with the TDCSTEP. This has the added benefit of
   // putting several ticks on the screen at once, which makes it easier
   // to see interesting things.
-  animationinterval = std::max(20, (int)pow(10, 4.0 - speednum/2.0));
+  animationinterval = std::max(20, (int)pow(10, 5.0 - speednum/2.0));
 
   switch(speednum < 1?1:speednum > 11?11:speednum){
     case  1: TDCSTEP =    1; break;
@@ -939,12 +939,12 @@ static void set_intervals(const int speednum)
     case  3: TDCSTEP =    4; break;
     case  4: TDCSTEP =    4; break;
     case  5: TDCSTEP =    8; break;
-    case  6: TDCSTEP =   16; break;
-    case  7: TDCSTEP =   32; break;
-    case  8: TDCSTEP =   64; break;
-    case  9: TDCSTEP =  128; break;
-    case 10: TDCSTEP =  256; break;
-    case 11: TDCSTEP = 1024; break;
+    case  6: TDCSTEP =   32; break;
+    case  7: TDCSTEP =   64; break;
+    case  8: TDCSTEP =  128; break;
+    case  9: TDCSTEP =  256; break;
+    case 10: TDCSTEP =  512; break;
+    case 11: TDCSTEP = 2048; break;
   }
 }
 
