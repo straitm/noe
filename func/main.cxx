@@ -44,6 +44,7 @@ TODO:
 #include <algorithm>
 #include <string.h>
 #include "event.h"
+#include "geo.h"
 
 struct DRAWPARS{
   // The ticks to draw right now, typically just the minimum needed
@@ -68,6 +69,12 @@ static int TDCSTEP = 4;
 /* The events and the current event index in the vector */
 extern std::vector<noeevent> theevents;
 static int gevi = 0;
+
+extern int first_mucatcher, ncells_perplane;
+extern int nplanes;
+extern int pixx, pixy;
+extern int ybox, xboxnomu, yboxnomu, xbox;
+extern bool isfd;
 
 /* GTK objects */
 static const int NSTATBOXES = 4;
@@ -107,92 +114,6 @@ static gulong animationinterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
 static gulong animatetimeoutid = 0;
 
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-static const int NDnplanes_perview = 8 * 12 + 11,
-                 NDfirst_mucatcher = 8 * 24,
-                 NDncells_perplane = 3 * 32;
-static const int FDnplanes_perview = 16 * 28,
-                 FDfirst_mucatcher = 9999, // i.e. no muon catcher
-                 FDncells_perplane = 12 * 32;
-
-// Given 'y', the number of vertical pixels we will use for each cell,
-// return the number of horizontal pixels we will use.
-static int pixx_from_pixy(const int y)
-{
-  const double ExtruDepth      = 66.1  ; // mm
-  const double ModuleGlueThick =  0.379;
-  const double FDBlockGap      =  4.5  ;
-  const double NDBlockGap      =  6.35 ;
-
-  const double FD_planes_per_block = 32;
-  const double ND_planes_per_block = 24;
-  const double mean_block_gap_per_plane =
-    (FDBlockGap/FD_planes_per_block + NDBlockGap/ND_planes_per_block)/2;
-
-  const double ExtruWidth     = 634.55;
-  const double ExtruGlueThick =   0.48;
-
-  const double meancellwidth = (2*ExtruWidth+ExtruGlueThick)/32;
-  const double celldepth = ExtruDepth+ModuleGlueThick+mean_block_gap_per_plane;
-
-  // Comes out to 3.36, giving pixel ratios 3:1, 2:7, 3:10, 4:13, 5:17, etc.
-  const double planepix_per_cellpix = 2*celldepth/meancellwidth;
-
-  printf("%.5f\n", planepix_per_cellpix);
-
-  return int(y*planepix_per_cellpix + 0.5);
-}
-
-static const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
-static const int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-static int nplanes_perview = NDnplanes_perview,
-           first_mucatcher = NDfirst_mucatcher,
-           ncells_perplane = NDncells_perplane;
-static int nplanes = 2*nplanes_perview;
-static int pixx = NDpixx, pixy = NDpixy;
-static int ybox, xboxnomu, yboxnomu, xbox;
-
-// Calculate the size of the bounding boxes for the detector's x and y
-// views, plus the muon catcher cutaway.  Resize the window to match.
-static void setboxes()
-{
-  ybox = ncells_perplane*pixy + pixy/2 /* cell stagger */,
-  xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */,
-
-  // muon catcher is 1/3 empty.  Do not include cell stagger here since we want
-  // the extra half cells to be inside the active box.
-  yboxnomu = (ncells_perplane/3)*pixy,
-
-  xbox = pixx*(nplanes_perview +
-               (first_mucatcher < nplanes?
-               nplanes_perview - first_mucatcher/2: 0));
-  if(edarea != NULL)
-    gtk_widget_set_size_request(edarea,
-                                xbox + 2 /* border */ + pixx/2 /* plane stagger */,
-                                ybox*2 + viewsep*pixy);
-}
-
-// We're going to assume the ND until we see a hit that indicates it's FD
-static bool isfd = false;
-
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-static void setfd()
-{
-  isfd = true;
-
-  nplanes_perview = FDnplanes_perview;
-  first_mucatcher = FDfirst_mucatcher;
-  ncells_perplane = FDncells_perplane;
-
-  nplanes = 2*nplanes_perview;
-
-  pixx = FDpixx;
-  pixy = FDpixy;
-
-  setboxes();
-}
 
 // This hack allows us to get proper minus signs that look a lot better
 // than the hyphens that printf puts out.  I'm sure there's a better
@@ -620,6 +541,13 @@ static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
   return TRUE;
 }
 
+static void request_edarea_size()
+{
+  gtk_widget_set_size_request(edarea,
+    xbox + 2 /* border */ + pixx/2 /* plane stagger */,
+    ybox*2 + viewsep*pixy);
+}
+
 // draw_event_and to_next_free_run circularly refer to each other...
 static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
 
@@ -630,7 +558,10 @@ static void draw_event(const DRAWPARS * const drawpars)
   set_eventn_status();
   if(theevents.empty()) return;
 
-  if(!isfd && theevents[gevi].fdlike) setfd();
+  if(!isfd && theevents[gevi].fdlike){
+    setfd();
+    request_edarea_size();
+  }
 
   cairo_t * cr = gdk_cairo_create(edarea->window);
   cairo_push_group(cr);
@@ -1133,6 +1064,7 @@ static void setup()
 
   edarea = gtk_drawing_area_new();
   setboxes();
+  request_edarea_size();
   g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(redraw_event),NULL);
   g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
