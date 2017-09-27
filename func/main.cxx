@@ -32,6 +32,10 @@ TODO:
 
 * Animate by TNS times instead of TDC.  Be able to switch between?
 
+* Allow animation and free running at the same time.
+
+* Space out muon catcher planes more accurately.
+
 */
 
 #include <gtk/gtk.h>
@@ -56,6 +60,9 @@ static const int MAXSTATUS = 1024;
 // Let's see.  I believe both detectors read out in increments of 4 TDC units,
 // but the FD is multiplexed whereas the ND isn't, so any given channel at the
 // FD can only report every 4 * 2^N TDC units, where I think N = 2.
+//
+// TODO: be more clear with the user about what is being displayed when
+// TDCSTEP != 1
 static int TDCSTEP = 4;
 
 /* The events and the current event index in the vector */
