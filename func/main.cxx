@@ -28,13 +28,14 @@ Code style:
 
 TODO:
 
-* Zooming of some sort.
-
 * Animate by TNS times instead of TDC.  Be able to switch between?
 
 * Allow animation and free running at the same time.
 
 * Space out muon catcher planes more accurately.
+
+* Skip over user events when there are too many of them to handle,
+particularly when mousing over lots of hits in a busy event.
 
 */
 
@@ -73,6 +74,8 @@ static int gevi = 0;
 extern int first_mucatcher, ncells_perplane;
 extern int nplanes;
 extern int pixx, pixy;
+const extern int FDpixy, FDpixx;
+const extern int NDpixy, NDpixx;
 extern int ybox, xboxnomu, yboxnomu, xbox;
 extern bool isfd;
 
@@ -204,13 +207,13 @@ static void draw_background(cairo_t * cr)
   const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
 
   // Y-view main box
-  cairo_rectangle(cr, 0.5, 0.5 + ybox + viewsep*pixy - pixy/2 /* cell stagger */,
+  cairo_rectangle(cr, 0.5, 0.5 + ybox + viewsep - pixy/2 /* cell stagger */,
                       xbox+1-hacky_subtraction_for_y_mucatch, ybox+1);
   cairo_stroke(cr);
 
   // Y-view muon catcher empty box
   if(hasmucatch){
-    cairo_rectangle(cr, 1.5 + xboxnomu, 0.5 + ybox + viewsep*pixy - pixy/2,
+    cairo_rectangle(cr, 1.5 + xboxnomu, 0.5 + ybox + viewsep - pixy/2,
                         xbox-xboxnomu-hacky_subtraction_for_y_mucatch, yboxnomu);
     cairo_stroke(cr);
   }
@@ -230,6 +233,12 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   const int screenx = det_to_screen_x(thishit.plane),
             screeny = det_to_screen_y(thishit.plane, thishit.cell);
 
+  // If the zoom carries this hit out of the view in screen y, don't
+  // display it.
+  const bool xview = thishit.plane%2 == 1;
+  if(screen_y_to_xview(screeny) ^ xview) return;
+  if(xview && screeny > ybox) return;
+
   float red, green, blue;
 
   colorhit(thishit.adc, red, green, blue,
@@ -241,7 +250,7 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   // draw all the way across to the next plane in the view to be easier
   // to look at.  If cells are visually large, make them closer to the
   // actual size of the scintillator.
-  const bool xexpand = pixx <= 7;
+  const bool xexpand = true; // pixx <= 7;
   const int epixx = xexpand?pixx:scintpix_from_pixx(pixx);
 
   // This is the only part of drawing an event that takes any time
@@ -470,7 +479,7 @@ static void request_edarea_size()
 {
   gtk_widget_set_size_request(edarea,
     xbox + 2 /* border */ + pixx/2 /* plane stagger */,
-    ybox*2 + viewsep*pixy);
+    ybox*2 + viewsep);
 }
 
 // draw_event_and to_next_free_run circularly refer to each other...
@@ -725,6 +734,43 @@ static void getuserevent()
 
   prepare_to_swich_events();
   handle_event();
+}
+
+extern int screenxoffset, screenyoffset;
+static gboolean mousebutton(__attribute__((unused)) GtkWidget * widg,
+                            GdkEventScroll * gevent,
+                            __attribute__((unused)) gpointer data)
+{
+  const bool up = gevent->direction == GDK_SCROLL_UP;
+
+  const int plane = screen_to_plane((int)gevent->x, (int)gevent->y);
+  const int cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
+
+  const int old_pixy = pixy;
+
+  if(up) pixy++;
+  else   pixy = std::max(isfd?FDpixy:NDpixy, pixy-1);
+
+  if(old_pixy == pixy) return TRUE;
+
+  pixx = pixx_from_pixy(pixy);
+
+  const int newtoleft = det_to_screen_x(plane) + pixx/2;
+  screenxoffset += newtoleft - (int)gevent->x;
+  if(screenxoffset < 0) screenxoffset = 0;
+
+  const int newtotop = det_to_screen_y(plane, cell) + pixy/2;
+  screenyoffset += newtotop - (int)gevent->y;
+  if(screenyoffset < 0) screenyoffset = 0;
+
+  // If we're back at the unzoomed view, clear offsets, even though this
+  // violates the "don't move the hit under the mouse pointer" rule.
+  if((isfd && pixx == FDpixx) || (!isfd && pixx == NDpixx))
+    screenxoffset = screenyoffset = 0;
+
+  redraw_event(NULL, NULL, NULL);
+
+  return TRUE;
 }
 
 // Handle the user clicking the "run freely" check box.
@@ -993,8 +1039,10 @@ static void setup()
   g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(redraw_event),NULL);
   g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
+  g_signal_connect(edarea, "scroll-event", G_CALLBACK(mousebutton), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
-                                | GDK_POINTER_MOTION_MASK);
+                                | GDK_POINTER_MOTION_MASK
+                                | GDK_SCROLL_MASK);
 
   GtkWidget * next = gtk_button_new_with_mnemonic("_Next Event");
   g_signal_connect(next, "clicked", G_CALLBACK(to_next), new bool(true));

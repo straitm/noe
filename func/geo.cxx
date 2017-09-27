@@ -7,8 +7,8 @@ static const int FDnplanes_perview = 16 * 28,
                  FDfirst_mucatcher = 9999, // i.e. no muon catcher
                  FDncells_perplane = 12 * 32;
 
-static const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
-static const int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
+const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
+const int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
 
 int viewsep = 8; // vertical cell widths between x and y views
 
@@ -22,22 +22,22 @@ int nplanes = 2*nplanes_perview;
 int pixx = NDpixx, pixy = NDpixy;
 int ybox, xboxnomu, yboxnomu, xbox;
 
-const double ExtruDepth      = 66.1  ; // mm
-const double ExtruWallThick  =  5.1  ;
-const double ModuleGlueThick =  0.379;
-const double FDBlockGap      =  4.5  ;
-const double NDBlockGap      =  6.35 ;
+static const double ExtruDepth      = 66.1  ; // mm
+static const double ExtruWallThick  =  5.1  ;
+static const double ModuleGlueThick =  0.379;
+static const double FDBlockGap      =  4.5  ;
+static const double NDBlockGap      =  6.35 ;
 
-const int FD_planes_per_block = 32;
-const int ND_planes_per_block = 24;
+static const int FD_planes_per_block = 32;
+static const int ND_planes_per_block = 24;
 
-const double ExtruWidth     = 634.55;
-const double ExtruGlueThick =   0.48;
+static const double ExtruWidth     = 634.55;
+static const double ExtruGlueThick =   0.48;
 
-const double mean_block_gap_per_plane =
+static const double mean_block_gap_per_plane =
   (FDBlockGap/FD_planes_per_block + NDBlockGap/ND_planes_per_block)/2;
 
-const double celldepth = ExtruDepth+ModuleGlueThick+mean_block_gap_per_plane;
+static const double celldepth = ExtruDepth+ModuleGlueThick+mean_block_gap_per_plane;
 
 
 // Given 'y', the number of vertical pixels we will use for each cell,
@@ -90,6 +90,10 @@ void setfd()
   setboxes();
 }
 
+// When we're zoomed, this stores the amount to the left of the screen
+// that the left/top of the first plane/cell is.
+int screenxoffset = 0, screenyoffset = 0;
+
 int det_to_screen_x(const int plane)
 {
   const bool xview = plane%2 == 1;
@@ -100,7 +104,8 @@ int det_to_screen_x(const int plane)
          +(plane > first_mucatcher?plane-first_mucatcher:0))/2)
 
         // stagger x and y planes
-      + xview*pixx/2;
+      + xview*pixx/2
+      - screenxoffset;
 }
 
 int det_to_screen_y(const int plane, const int cell)
@@ -115,16 +120,21 @@ int det_to_screen_y(const int plane, const int cell)
           - xview*(ncells_perplane + viewsep)) - (pixy-1)
 
          // Physical stagger of planes in each view
-         + celldown*pixy/2;
+         + celldown*pixy/2
+         - screenyoffset;
 }
 
 bool screen_y_to_xview(const int y)
 {
-  return y <= 2 /* border */ + ybox + (viewsep*pixy)/2;
+  // unaffected by zooming  The xview always owns the top half of the screen
+  return y <= 2 /* border */ + ybox + viewsep/2;
 }
 
 int screen_to_plane(const int x, const int y)
 {
+  // Where x would be if not offset
+  const int unoffsetx = x + screenxoffset;
+
   const bool xview = screen_y_to_xview(y);
 
   // The number of the first muon catcher plane counting only planes
@@ -133,8 +143,8 @@ int screen_to_plane(const int x, const int y)
 
   // Account for the plane stagger and border width.
   int effx;
-  if(x-2 >= halfmucatch*pixx) effx = x - 2 - pixx/2;
-  else effx = x - 2;
+  if(unoffsetx-2 >= halfmucatch*pixx) effx = unoffsetx - 2 - pixx/2;
+  else effx = unoffsetx - 2;
 
   // Half the plane number, as long as we're not in the muon catcher
   int halfp = xview? (effx-pixx/2)/pixx
@@ -154,11 +164,14 @@ int screen_to_plane(const int x, const int y)
 
 int screen_to_cell(const int x, const int y)
 {
+  // Where y would be if not offset.  Do not pass into functions.
+  const int unoffsety = y + screenyoffset;
+
   const bool xview = screen_y_to_xview(y);
   const int plane = screen_to_plane(x, y);
   const bool celldown = !((plane/2)%2 ^ (plane%2));
-  const int effy = (xview? y
-                         : y - ybox - viewsep*pixy + 1)
+  const int effy = (xview? unoffsety
+                         : unoffsety - ybox - viewsep*pixy + 1)
                    - celldown*(pixy/2) - 2;
 
   const int c = ncells_perplane - effy/pixy - 1;
