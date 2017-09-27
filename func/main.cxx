@@ -349,24 +349,31 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
 
   cairo_set_source_rgb(cr, red, green, blue);
 
+  // If we're representing cells with a very small number of pixels,
+  // draw all the way across to the next plane in the view to be easier
+  // to look at.  If cells are visually large, make them closer to the
+  // actual size of the scintillator.
+  const bool xexpand = pixx <= 7;
+  const int epixx = xexpand?pixx:scintpix_from_pixx(pixx);
+
   // This is the only part of drawing an event that takes any time
   // I have measured drawing a line to be twice as fast as drawing a
   // rectangle of width 1, so it is totally worth it to have a special
   // case.  This really helps with drawing big events.
   if(pixy == 1){
     cairo_move_to(cr, screenx,      screeny+0.5);
-    cairo_line_to(cr, screenx+pixx, screeny+0.5);
+    cairo_line_to(cr, screenx+epixx, screeny+0.5);
   }
   // This is a smaller gain, but it is definitely faster by about 10%.
   else if(pixy == 2){
     cairo_move_to(cr, screenx,      screeny+0.5);
-    cairo_line_to(cr, screenx+pixx, screeny+0.5);
+    cairo_line_to(cr, screenx+epixx, screeny+0.5);
     cairo_move_to(cr, screenx,      screeny+1.5);
-    cairo_line_to(cr, screenx+pixx, screeny+1.5);
+    cairo_line_to(cr, screenx+epixx, screeny+1.5);
   }
   else{
     cairo_rectangle(cr, screenx+0.5, screeny+0.5,
-                        pixx-1,      pixy-1);
+                        epixx-1,      pixy-1);
   }
   cairo_stroke(cr);
 }
