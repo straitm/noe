@@ -115,30 +115,32 @@ static const int FDnplanes_perview = 16 * 28,
                  FDfirst_mucatcher = 9999, // i.e. no muon catcher
                  FDncells_perplane = 12 * 32;
 
-// Want the nearest small integer box that has an aspect ratio close to 3.36:1.
-// Options: 3:1, 2:7, 3:10, 4:13, 5:17, etc.
-static int pixx_from_pixy(const int x)
+// Given 'y', the number of vertical pixels we will use for each cell,
+// return the number of horizontal pixels we will use.
+static int pixx_from_pixy(const int y)
 {
-  const double ExtruDepth      = 66.1; // mm
+  const double ExtruDepth      = 66.1  ; // mm
   const double ModuleGlueThick =  0.379;
-  const double FDBlockGap =         4.5;
-  const double NDBlockGap =         6.35;
+  const double FDBlockGap      =  4.5  ;
+  const double NDBlockGap      =  6.35 ;
+
   const double FD_planes_per_block = 32;
   const double ND_planes_per_block = 24;
   const double mean_block_gap_per_plane =
     (FDBlockGap/FD_planes_per_block + NDBlockGap/ND_planes_per_block)/2;
 
   const double ExtruWidth     = 634.55;
-  const double ExtruGlueThick = 0.48;
+  const double ExtruGlueThick =   0.48;
 
   const double meancellwidth = (2*ExtruWidth+ExtruGlueThick)/32;
   const double celldepth = ExtruDepth+ModuleGlueThick+mean_block_gap_per_plane;
 
+  // Comes out to 3.36, giving pixel ratios 3:1, 2:7, 3:10, 4:13, 5:17, etc.
   const double planepix_per_cellpix = 2*celldepth/meancellwidth;
 
   printf("%.5f\n", planepix_per_cellpix);
 
-  return int(x*planepix_per_cellpix + 0.5);
+  return int(y*planepix_per_cellpix + 0.5);
 }
 
 static const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
