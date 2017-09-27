@@ -10,6 +10,7 @@ static const int FDnplanes_perview = 16 * 28,
 static const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
 static const int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
 
+int viewsep = 8; // vertical cell widths between x and y views
 
 // We're going to assume the ND until we see a hit that indicates it's FD
 bool isfd = false;
@@ -87,4 +88,82 @@ void setfd()
   pixy = FDpixy;
 
   setboxes();
+}
+
+int det_to_screen_x(const int plane)
+{
+  const bool xview = plane%2 == 1;
+  return 1 + // Don't overdraw the border
+    pixx*((plane
+
+         // space out the muon catcher planes
+         +(plane > first_mucatcher?plane-first_mucatcher:0))/2)
+
+        // stagger x and y planes
+      + xview*pixx/2;
+}
+
+int det_to_screen_y(const int plane, const int cell)
+{
+  const bool xview = plane%2 == 1;
+
+  // In each view, every other plane is offset by half a cell width
+  const bool celldown = !((plane/2)%2 ^ (plane%2));
+
+  // put y view on the bottom
+  return pixy*(ncells_perplane*2 + viewsep - cell
+          - xview*(ncells_perplane + viewsep)) - (pixy-1)
+
+         // Physical stagger of planes in each view
+         + celldown*pixy/2;
+}
+
+bool screen_y_to_xview(const int y)
+{
+  return y <= 2 /* border */ + ybox + (viewsep*pixy)/2;
+}
+
+int screen_to_plane(const int x, const int y)
+{
+  const bool xview = screen_y_to_xview(y);
+
+  // The number of the first muon catcher plane counting only planes
+  // in one view.
+  const int halfmucatch = (first_mucatcher)/2 + !xview;
+
+  // Account for the plane stagger and border width.
+  int effx;
+  if(x-2 >= halfmucatch*pixx) effx = x - 2 - pixx/2;
+  else effx = x - 2;
+
+  // Half the plane number, as long as we're not in the muon catcher
+  int halfp = xview? (effx-pixx/2)/pixx
+                    :(    effx   )/pixx;
+
+  // Fix up the case of being in the muon catcher
+  if(halfp > halfmucatch) halfp = halfmucatch +
+                                  (halfp - halfmucatch)/2;
+
+  // The plane number, except it might be out of range
+  const int p = halfp*2 + xview;
+
+  if(p < xview) return -1;
+  if(p >= nplanes) return -1;
+  return p;
+}
+
+int screen_to_cell(const int x, const int y)
+{
+  const bool xview = screen_y_to_xview(y);
+  const int plane = screen_to_plane(x, y);
+  const bool celldown = !((plane/2)%2 ^ (plane%2));
+  const int effy = (xview? y
+                         : y - ybox - viewsep*pixy + 1)
+                   - celldown*(pixy/2) - 2;
+
+  const int c = ncells_perplane - effy/pixy - 1;
+  if(c < 0) return -1;
+  if(c >= ncells_perplane) return -1;
+  if(plane >= first_mucatcher && !xview && c >= 2*ncells_perplane/3) return -1;
+  return c;
 }

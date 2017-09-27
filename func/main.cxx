@@ -53,7 +53,7 @@ struct DRAWPARS{
   bool clear;
 };
 
-static const int viewsep = 8; // vertical cell widths between x and y views
+extern int viewsep; // vertical cell widths between x and y views
 
 // Maximum length of any string being printed to a status bar
 static const int MAXSTATUS = 1024;
@@ -218,122 +218,10 @@ static void draw_background(cairo_t * cr)
 
 static bool visible_hit(const int32_t tdc)
 {
-  // XXX the acceptance range of TDCSTEP isn't well integrated
   return tdc <= theevents[gevi].current_maxtick &&
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
 }
 
-// Given the plane, returns the left side of the screen position in Cairo
-// coordinates.  More precisely, returns half a pixel to the left of the left
-// side.
-static int det_to_screen_x(const int plane)
-{
-  const bool xview = plane%2 == 1;
-  return 1 + // Don't overdraw the border
-    pixx*((plane
-
-         // space out the muon catcher planes
-         +(plane > first_mucatcher?plane-first_mucatcher:0))/2)
-
-        // stagger x and y planes
-      + xview*pixx/2;
-}
-
-// Given the plane and cell, return the top of the screen position in
-// Cairo coordinates.  More precisely, returns half a pixel above the top.
-static int det_to_screen_y(const int plane, const int cell)
-{
-  const bool xview = plane%2 == 1;
-
-  // In each view, every other plane is offset by half a cell width
-  const bool celldown = !((plane/2)%2 ^ (plane%2));
-
-  // put y view on the bottom
-  return pixy*(ncells_perplane*2 + viewsep - cell
-          - xview*(ncells_perplane + viewsep)) - (pixy-1)
-
-         // Physical stagger of planes in each view
-         + celldown*pixy/2;
-}
-
-// Given a screen y position, return true if we are in the x-view, or if we are
-// in neither view, return true if we are closer to the x-view.  The empty part
-// of the detector above the muon catcher is considered to be part of the
-// y-view as though the detector were a rectangle in both views.
-static int screen_y_to_xview(const int y)
-{
-  return y <= 2 /* border */ + ybox + (viewsep*pixy)/2;
-}
-
-// Given a screen position, returns the plane number. Any x position within the
-// boundaries of hits displayed in a plane, including the right and left
-// pixels, will return the same plane number.  In the muon catcher, return the
-// nearest plane in the view if the screen position is in dead material.  If
-// the screen position is outside the detector boxes to the right or left or
-// above or below both views, return -1.  If it is between the two views,
-// return the plane for the closer view.
-static int screen_to_plane(const int x, const int y)
-{
-  const bool xview = screen_y_to_xview(y);
-
-  // The number of the first muon catcher plane counting only planes
-  // in one view.
-  const int halfmucatch = (first_mucatcher)/2 + !xview;
-
-  // Account for the plane stagger and border width.
-  int effx;
-  if(x-2 >= halfmucatch*pixx) effx = x - 2 - pixx/2;
-  else effx = x - 2;
-
-  // Half the plane number, as long as we're not in the muon catcher
-  int halfp = xview? (effx-pixx/2)/pixx
-                    :(    effx   )/pixx;
-
-  // Fix up the case of being in the muon catcher
-  if(halfp > halfmucatch) halfp = halfmucatch +
-                                  (halfp - halfmucatch)/2;
-
-  // The plane number, except it might be out of range
-  const int p = halfp*2 + xview;
-
-  if(p < xview) return -1;
-  if(p >= nplanes) return -1;
-  return p;
-}
-
-// Given a screen position, returns the cell number.  If no hit cell is in this
-// position, return the number of the closest cell in screen y coordinates,
-// i.e. the closest hit cell that is directly above or below the screen position,
-// even if the closest one is in another direction.  But if this position is
-// outside the detector boxes on the right or left, return -1.
-static int screen_to_cell(const int x, const int y)
-{
-  const bool xview = screen_y_to_xview(y);
-  const int plane = screen_to_plane(x, y);
-  const bool celldown = !((plane/2)%2 ^ (plane%2));
-  const int effy = (xview? y
-                         : y - ybox - viewsep*pixy + 1)
-                   - celldown*(pixy/2) - 2;
-
-  const int c = ncells_perplane - effy/pixy - 1;
-  if(c < 0) return -1;
-  if(c >= ncells_perplane) return -1;
-  if(plane >= first_mucatcher && !xview && c >= 2*ncells_perplane/3) return -1;
-
-  std::vector<hit> & THEhits = theevents[gevi].hits;
-  int mindist = 9999, closestcell = -1;
-  for(unsigned int i = 0; i < THEhits.size(); i++){
-    if(THEhits[i].plane != plane) continue;
-    if(!visible_hit(THEhits[i].tdc)) continue;
-    const int dist = abs(THEhits[i].cell - c);
-    if(dist < mindist){
-      mindist = dist;
-      closestcell = THEhits[i].cell;
-    }
-  }
-
-  return closestcell;
-}
 
 // Draw a single hit to the screen, taking into account whether it is the
 // "active" hit (i.e. being moused over right now).
@@ -527,6 +415,36 @@ static void change_highlighted_cell(GtkWidget * widg,
   cairo_destroy(cr);
 }
 
+// Given a screen position, returns the cell number.  If no hit cell is in this
+// position, return the number of the closest cell in screen y coordinates,
+// i.e. the closest hit cell that is directly above or below the screen position,
+// even if the closest one is in another direction.  But if this position is
+// outside the detector boxes on the right or left, return -1.
+static int screen_to_activecell(const int x, const int y)
+{
+  const bool xview = screen_y_to_xview(y);
+  const int c = screen_to_cell(x, y);
+  const int plane = screen_to_plane(x, y);
+
+  if(c < 0) return -1;
+  if(c >= ncells_perplane) return -1;
+  if(plane >= first_mucatcher && !xview && c >= 2*ncells_perplane/3) return -1;
+
+  std::vector<hit> & THEhits = theevents[gevi].hits;
+  int mindist = 9999, closestcell = -1;
+  for(unsigned int i = 0; i < THEhits.size(); i++){
+    if(THEhits[i].plane != plane) continue;
+    if(!visible_hit(THEhits[i].tdc)) continue;
+    const int dist = abs(THEhits[i].cell - c);
+    if(dist < mindist){
+      mindist = dist;
+      closestcell = THEhits[i].cell;
+    }
+  }
+
+  return closestcell;
+}
+
 // Handle the mouse arriving at a spot in the drawing area. Find what cell the
 // user is pointing at, highlight it, and show information about it.
 static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
@@ -540,7 +458,7 @@ static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
   const int oldactive_cell  = active_cell;
 
   active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
-  active_cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
+  active_cell  = screen_to_activecell((int)gevent->x, (int)gevent->y);
 
   change_highlighted_cell(edarea, oldactive_plane, oldactive_cell);
   set_eventn_status2();
