@@ -24,6 +24,14 @@ Code style:
   terminals, which leaves 83 columns after 5 columns are used for line
   numbers. So this code will be mostly within 80 columns and certainly
   within 83.
+======================================================================
+
+TODO:
+
+* Zooming of some sort.
+
+* Animate by TNS times instead of TDC.  Be able to switch between?
+
 */
 
 #include <gtk/gtk.h>
@@ -714,12 +722,11 @@ static bool get_event(const int change)
       gevi = theevents.size() - 1;
     }
     else{
-      // TODO make this work with abs(change) > 1... actually, do we care?
-      // It would make it easier to jump forward many events, I suppose.
-      // XXX this is great except that if events happen while not
-      // in the GTK loop, we get an assertion failure on the console.
-      // Maybe it's harmless, or nearly harmless, in that we just lose
-      // the user input.  Not sure.  It more or less seems to work.
+      // NOTE: this does not work with abs(change) > 1, but it doesn't
+      // matter since we never call get_event with a bigger number.
+      //
+      // NOTE: Leaving the GTK loop *seems* to be OK, but I'm not clear
+      // on what happens when user events arrive when we're outside.
       gtk_main_quit();
       return false;
     }
