@@ -650,7 +650,8 @@ static gboolean animation_step(__attribute__((unused)) gpointer data)
   // become visible when moused over.
   if(!cumulative_animation) E.current_mintick = E.current_maxtick;
 
-  drawpars.firsttick = cumulative_animation?E.current_mintick:E.current_maxtick;
+  drawpars.firsttick = cumulative_animation?E.current_mintick
+                                           :E.current_maxtick-(TDCSTEP-1);
   drawpars.lasttick  = E.current_maxtick;
   draw_event(&drawpars);
   return animate && E.current_maxtick < theevents[gevi].user_maxtick;
@@ -664,6 +665,8 @@ static gboolean handle_event()
   gtk_spin_button_set_range(GTK_SPIN_BUTTON(mintickslider), E.mintick, E.maxtick);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(maxtickslider), E.user_maxtick);
   gtk_spin_button_set_value(GTK_SPIN_BUTTON(mintickslider), E.user_mintick);
+  gtk_widget_draw(maxtickslider, NULL);
+  gtk_widget_draw(mintickslider, NULL);
   adjusttick_callback_inhibit = false;
 
   if(animate){
