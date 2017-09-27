@@ -67,6 +67,7 @@ static GtkWidget * ueventbut = NULL;
 static GtkWidget * ueventbox = NULL;
 static GtkWidget * mintickslider = NULL;
 static GtkWidget * maxtickslider = NULL;
+static GtkObject * speedadj = NULL;
 
 /* Running flags.  */
 static bool ghave_read_all = false;
@@ -887,14 +888,45 @@ static void toggle_cum_ani(GtkWidget * w,
   draw_event(&drawpars);
 }
 
+// Convert the abstract "speed" number from the user into a delay.
+static void set_intervals(const int speednum)
+{
+  freeruninterval = (int)pow(10, 6.5 - speednum/2.0);
+
+  // No point in trying to go faster than ~50Hz since the monitor won't
+  // keep up (to say nothing of the human eye). Control speeds of 6 and
+  // higher exclusively with the TDCSTEP. This has the added benefit of
+  // putting several ticks on the screen at once, which makes it easier
+  // to see interesting things.
+  animationinterval = std::max(20, (int)pow(10, 4.0 - speednum/2.0));
+
+  switch(speednum < 1?1:speednum > 11?11:speednum){
+    case  1: TDCSTEP =    1; break;
+    case  2: TDCSTEP =    2; break;
+    case  3: TDCSTEP =    4; break;
+    case  4: TDCSTEP =    4; break;
+    case  5: TDCSTEP =    8; break;
+    case  6: TDCSTEP =   16; break;
+    case  7: TDCSTEP =   32; break;
+    case  8: TDCSTEP =   64; break;
+    case  9: TDCSTEP =  128; break;
+    case 10: TDCSTEP =  256; break;
+    case 11: TDCSTEP = 1024; break;
+  }
+}
+
 // Handle the user clicking the "animate" check box.
 static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
-  if(animate)
+  if(animate){
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox), FALSE);
-  else
+    set_intervals(gtk_adjustment_get_value(GTK_ADJUSTMENT(speedadj)));
+  }
+  else{
     TDCSTEP = 1;
+  }
+
   handle_event();
 }
 
@@ -906,27 +938,6 @@ static void restart_animation(__attribute__((unused)) GtkWidget * w,
   animate = true;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(animate_checkbox), TRUE);
   handle_event();
-}
-
-// Convert the abstract "speed" number from the user into a delay.
-static void set_intervals(const int speednum)
-{
-  freeruninterval   = (int)pow(10, 6.5 - speednum/2.0);
-  animationinterval = (int)pow(10, 4.0 - speednum/2.0);
-
-  switch(speednum < 1?1:speednum > 11?11:speednum){
-    case  1: TDCSTEP =   1; break;
-    case  2: TDCSTEP =   2; break;
-    case  3: TDCSTEP =   4; break;
-    case  4: TDCSTEP =   4; break;
-    case  5: TDCSTEP =   4; break;
-    case  6: TDCSTEP =   8; break;
-    case  7: TDCSTEP =   8; break;
-    case  8: TDCSTEP =   8; break;
-    case  9: TDCSTEP =  16; break;
-    case 10: TDCSTEP =  32; break;
-    case 11: TDCSTEP = 128; break;
-  }
 }
 
 static void adjusttick(GtkWidget * wg, const gpointer dt)
@@ -1032,8 +1043,7 @@ static GtkWidget * make_tickslider(const bool ismax)
 static GtkWidget * make_speedslider()
 {
   const int initialspeednum = 6;
-  GtkObject * const speedadj = gtk_adjustment_new
-    (initialspeednum, 1, 11, 1, 1, 0);
+  speedadj = gtk_adjustment_new (initialspeednum, 1, 11, 1, 1, 0);
   set_intervals(initialspeednum);
   g_signal_connect(speedadj, "value_changed", G_CALLBACK(adjustspeed), NULL);
 
