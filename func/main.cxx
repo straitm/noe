@@ -840,7 +840,7 @@ static void getuserevent()
     gevi += (forward?1:-1);
 
   prepare_to_swich_events();
-  draw_whole_user_event();
+  handle_event();
 }
 
 // Handle the user clicking the "run freely" check box.
