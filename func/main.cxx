@@ -119,7 +119,26 @@ static const int FDnplanes_perview = 16 * 28,
 // Options: 3:1, 2:7, 3:10, 4:13, 5:17, etc.
 static int pixx_from_pixy(const int x)
 {
-  return int(x*3.36 + 0.5);
+  const double ExtruDepth      = 66.1; // mm
+  const double ModuleGlueThick =  0.379;
+  const double FDBlockGap =         4.5;
+  const double NDBlockGap =         6.35;
+  const double FD_planes_per_block = 32;
+  const double ND_planes_per_block = 24;
+  const double mean_block_gap_per_plane =
+    (FDBlockGap/FD_planes_per_block + NDBlockGap/ND_planes_per_block)/2;
+
+  const double ExtruWidth     = 634.55;
+  const double ExtruGlueThick = 0.48;
+
+  const double meancellwidth = (2*ExtruWidth+ExtruGlueThick)/32;
+  const double celldepth = ExtruDepth+ModuleGlueThick+mean_block_gap_per_plane;
+
+  const double planepix_per_cellpix = 2*celldepth/meancellwidth;
+
+  printf("%.5f\n", planepix_per_cellpix);
+
+  return int(x*planepix_per_cellpix + 0.5);
 }
 
 static const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
