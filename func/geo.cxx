@@ -75,6 +75,16 @@ int get_ybox(const int pixels_y)
          + pixels_y/2 /* cell stagger */ + 1 /* border */;
 }
 
+static int get_xviewymin(__attribute__((unused)) const int pixels_y)
+{
+  return 0; // :-)
+}
+
+static int get_yviewymin(const int pixels_y)
+{
+  return get_ybox(pixels_y) + viewsep - pixels_y/2 /* cell stagger */;
+}
+
 // Calculate the size of the bounding boxes for the detector's x and y
 // views, plus the muon catcher cutaway.  Resize the window to match.
 void setboxes()
@@ -94,7 +104,7 @@ void setboxes()
   const int yboxnomu = (ncells_perplane/3)*pixy;
 
   screenxview.xmin = pixx/2 /* plane stagger */;
-  screenxview.ymin = 0;
+  screenxview.ymin = get_xviewymin(pixy);
   screenxview.xsize = xbox;
   screenxview.ysize = ybox;
 
@@ -105,7 +115,7 @@ void setboxes()
   const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
 
   screenyview.xmin = 0;
-  screenyview.ymin = ybox + viewsep - pixy/2 /* cell stagger */;
+  screenyview.ymin = get_yviewymin(pixy);
   screenyview.xsize = xbox-hacky_subtraction_for_y_mucatch;
   screenyview.ysize = ybox;
 
@@ -157,7 +167,10 @@ int det_to_screen_y(const int plane, const int cell)
   // In each view, every other plane is offset by half a cell width
   const bool celldown = !((plane/2)%2 ^ (plane%2));
 
-  return (xview?screenxview.ymin:screenyview.ymin)
+         // Offset to the view, using the unzoomed size, since this sets
+         // the size of the view on the screen.
+  return (xview?get_xviewymin(isfd?FDpixy:NDpixy):
+                get_yviewymin(isfd?FDpixy:NDpixy))
 
          // cells numbered from the bottom
          + pixy*(ncells_perplane-cell)
