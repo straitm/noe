@@ -34,9 +34,6 @@ TODO:
 
 * Space out muon catcher planes more accurately.
 
-* Skip over user events when there are too many of them to handle,
-particularly when mousing over lots of hits in a busy event.
-
 * Adapt to the window size intelligently.
 
 */
@@ -254,15 +251,17 @@ static bool visible_hit(const int32_t tdc)
 // "active" hit (i.e. being moused over right now).
 static void draw_hit(cairo_t * cr, const hit & thishit)
 {
-  const int screenx = det_to_screen_x(thishit.plane),
-            screeny = det_to_screen_y(thishit.plane, thishit.cell);
+  rect & screenview = thishit.plane%2 == 1?screenxview:screenyview;
 
-  // If the zoom carries this hit out of the view in screen y, don't
-  // display it.
-  const bool xview = thishit.plane%2 == 1;
-  if( xview && screeny+pixy > screenxview.ymax()) return;
-  if(!xview && screeny      < screenyview.ymin) return;
-  if(!xview && screeny+pixy > screenyview.ymax()) return;
+  // Get position.  If the zoom carries this hit out of the view in screen y,
+  // don't display it.
+  const int screenx = det_to_screen_x(thishit.plane);
+  if(screenx      < screenview.xmin) return;
+  if(screenx+pixx > screenview.xmax()) return;
+
+  const int screeny = det_to_screen_y(thishit.plane, thishit.cell);
+  if(screeny      < screenview.ymin) return;
+  if(screeny+pixy > screenview.ymax()) return;
 
   float red, green, blue;
 
@@ -1116,6 +1115,7 @@ static void setup()
   g_signal_connect(edarea, "button-press-event",
                    G_CALLBACK(mousebuttonpress), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
+                                | GDK_POINTER_MOTION_HINT_MASK
                                 | GDK_POINTER_MOTION_MASK
                                 | GDK_BUTTON_PRESS_MASK
                                 | GDK_SCROLL_MASK);
