@@ -66,6 +66,8 @@ int scintpix_from_pixx(const int x)
 // views, plus the muon catcher cutaway.  Resize the window to match.
 void setboxes()
 {
+  // TODO why not use the det_to_screen_x/y functions to get these?
+
   const int ybox = ncells_perplane*pixy
                     + pixy/2 /* cell stagger */ + 1 /* border */;
 
@@ -159,7 +161,7 @@ int det_to_screen_y(const int plane, const int cell)
 bool screen_y_to_xview(const int y)
 {
   // unaffected by zooming  The xview always owns the top half of the screen
-  return y <= (screenxview.ymin + screenxview.ysize + screenyview.ymin)/2;
+  return y <= (screenxview.ymax() + screenyview.ymin)/2;
 }
 
 int screen_to_plane(const int x, const int y)

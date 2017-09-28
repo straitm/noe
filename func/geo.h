@@ -1,6 +1,8 @@
 struct rect{
   int xmin, ymin;
   int xsize, ysize;
+  int ymax(){ return ymin + ysize; }
+  int xmax(){ return xmin + xsize; }
 };
 
 // Given the number of pixels used for the vertical extent of a hit in one

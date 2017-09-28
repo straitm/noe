@@ -139,6 +139,12 @@ static void set_status(const int boxn, const char * format, ...)
   gtk_widget_draw(statbox[boxn], NULL);
 }
 
+// True if we are zoomed, i.e. not at the full detector view.
+static bool zoomed()
+{
+  return (isfd && pixx != FDpixx) || (!isfd && pixx != NDpixx);
+}
+
 // Given a hit energy, set red, green and blue to the color we want to display
 // for the hit.  If "active" is true, set a brighter color.  This is intended
 // for when the user has moused over the cell.
@@ -198,21 +204,32 @@ static void draw_background(cairo_t * cr)
   cairo_set_source_rgb(cr, 1, 0, 1);
   cairo_set_line_width(cr, 1.0);
 
-  // X-view box
-  cairo_rectangle(cr, 0.5+screenxview.xmin, 0.5+screenxview.ymin,
-                      screenxview.xsize, screenxview.ysize);
-  cairo_stroke(cr);
-
-  // Y-view main box
-  cairo_rectangle(cr, 0.5+screenyview.xmin, 0.5+screenyview.ymin,
-                      screenyview.xsize, screenyview.ysize);
-  cairo_stroke(cr);
-
-  // Y-view muon catcher empty box
-  if(first_mucatcher < nplanes){
-    cairo_rectangle(cr, 0.5+screenmu.xmin, 0.5+screenmu.ymin,
-                        screenmu.xsize, screenmu.ysize);
+  if(zoomed()){
+    cairo_move_to(cr, screenxview.xmin,   0.5+screenxview.ymax());
+    cairo_line_to(cr, screenxview.xmax(), 0.5+screenxview.ymax());
     cairo_stroke(cr);
+
+    cairo_move_to(cr, screenyview.xmin,   0.5+screenyview.ymin);
+    cairo_line_to(cr, screenyview.xmax(), 0.5+screenyview.ymin);
+    cairo_stroke(cr);
+  }
+  else{
+    // X-view box
+    cairo_rectangle(cr, 0.5+screenxview.xmin, 0.5+screenxview.ymin,
+                        screenxview.xsize, screenxview.ysize);
+    cairo_stroke(cr);
+
+    // Y-view main box
+    cairo_rectangle(cr, 0.5+screenyview.xmin, 0.5+screenyview.ymin,
+                        screenyview.xsize, screenyview.ysize);
+    cairo_stroke(cr);
+
+    // Y-view muon catcher empty box
+    if(first_mucatcher < nplanes){
+      cairo_rectangle(cr, 0.5+screenmu.xmin, 0.5+screenmu.ymin,
+                          screenmu.xsize, screenmu.ysize);
+      cairo_stroke(cr);
+    }
   }
 }
 
@@ -232,9 +249,9 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   // If the zoom carries this hit out of the view in screen y, don't
   // display it.
   const bool xview = thishit.plane%2 == 1;
-  if( xview && screeny+pixy > screenxview.ymin + screenxview.ysize) return;
+  if( xview && screeny+pixy > screenxview.ymax()) return;
   if(!xview && screeny      < screenyview.ymin) return;
-  if(!xview && screeny+pixy > screenyview.ymin + screenyview.ysize) return;
+  if(!xview && screeny+pixy > screenyview.ymax()) return;
 
   float red, green, blue;
 
@@ -255,7 +272,7 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   // rectangle of width 1, so it is totally worth it to have a special
   // case.  This really helps with drawing big events.
   if(pixy == 1){
-    cairo_move_to(cr, screenx,      screeny+0.5);
+    cairo_move_to(cr, screenx,       screeny+0.5);
     cairo_line_to(cr, screenx+epixx, screeny+0.5);
   }
   // This is a smaller gain, but it is definitely faster by about 10%.
@@ -475,8 +492,7 @@ static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
 static void request_edarea_size()
 {
   gtk_widget_set_size_request(edarea,
-    screenxview.xmin + screenxview.xsize + 1,
-    screenyview.ymin + screenyview.ysize + 1);
+    screenxview.xmax() + 1, screenyview.ymax() + 1);
 }
 
 // draw_event_and to_next_free_run circularly refer to each other...
@@ -767,7 +783,7 @@ static gboolean mousebutton(__attribute__((unused)) GtkWidget * widg,
 
   // If we're back at the unzoomed view, clear offsets, even though this
   // violates the "don't move the hit under the mouse pointer" rule.
-  if((isfd && pixx == FDpixx) || (!isfd && pixx == NDpixx))
+  if(!zoomed())
     screenxoffset = screenyoffset_yview = screenyoffset_xview = 0;
 
   redraw_event(NULL, NULL, NULL);
