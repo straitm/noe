@@ -16,6 +16,16 @@ void setboxes();
 // Switch from ND to FD
 void setfd();
 
+// Given the number of horizontal pixels per cell, return the size of the
+// horizontal detector box.  This is the number of pixels from the border
+// to the last non-border pixel.
+int get_xbox(const int pixels_x);
+
+// Given the number of vertical pixels per cell, return the size of the
+// vertical detector box.  This is the number of pixels from the border
+// to the last non-border pixel.
+int get_ybox(const int pixels_y);
+
 // Given the number of pixels used for the horizontal extent of a plane in one
 // view, return the number of pixels we should use for the extent of
 // scintillator.  This is about 0.42 of the input.

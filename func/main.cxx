@@ -146,6 +146,16 @@ static bool zoomed()
   return (isfd && pixx != FDpixx) || (!isfd && pixx != NDpixx);
 }
 
+static int unzoomedpixx()
+{
+  return isfd? FDpixx: NDpixx;
+}
+
+static int unzoomedpixy()
+{
+  return isfd? FDpixy: NDpixy;
+}
+
 // Given a hit energy, set red, green and blue to the color we want to display
 // for the hit.  If "active" is true, set a brighter color.  This is intended
 // for when the user has moused over the cell.
@@ -469,27 +479,6 @@ static int screen_to_activecell(const int x, const int y)
   return closestcell;
 }
 
-// Handle the mouse arriving at a spot in the drawing area. Find what cell the
-// user is pointing at, highlight it, and show information about it.
-static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
-                          GdkEventMotion * gevent,
-                          __attribute__((unused)) gpointer data)
-{
-  if(gevent == NULL) return TRUE; // shouldn't happen
-  if(theevents.empty()) return TRUE; // No coordinates in this case
-
-  const int oldactive_plane = active_plane;
-  const int oldactive_cell  = active_cell;
-
-  active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
-  active_cell  = screen_to_activecell((int)gevent->x, (int)gevent->y);
-
-  change_highlighted_cell(edarea, oldactive_plane, oldactive_cell);
-  set_eventn_status2();
-
-  return TRUE;
-}
-
 static void request_edarea_size()
 {
   gtk_widget_set_size_request(edarea,
@@ -748,6 +737,72 @@ static void getuserevent()
 
   prepare_to_swich_events();
   handle_event();
+}
+
+static int xonbutton1 = 0, yonbutton1 = 0;
+static int newbuttonpush = false;
+static gboolean mousebuttonpress(__attribute__((unused)) GtkWidget * widg,
+                                 GdkEventMotion * gevent,
+                                 __attribute__((unused)) gpointer data)
+{
+  xonbutton1 = gevent->x;
+  yonbutton1 = gevent->y;
+  newbuttonpush = true;
+  return TRUE;
+}
+
+static void dopanning(GdkEventMotion * gevent)
+{
+  const bool xview = screen_y_to_xview(yonbutton1);
+  int * yoffset = xview?&screenyoffset_xview:&screenyoffset_yview;
+
+  static int oldx = xonbutton1, oldy = yonbutton1;
+  if(newbuttonpush){
+    oldx = xonbutton1, oldy = yonbutton1;
+    newbuttonpush = false;
+  }
+
+  screenxoffset += oldx - gevent->x;
+  *yoffset      += oldy - gevent->y;
+
+  if(screenxoffset < 0) screenxoffset = 0;
+  if(*yoffset      < 0) *yoffset      = 0;
+
+  const int maxxpan = get_xbox(pixx) - get_xbox(unzoomedpixx());
+  const int maxypan = get_ybox(pixy) - get_ybox(unzoomedpixy());
+
+  if(screenxoffset >= maxxpan) screenxoffset = maxxpan;
+  if(*yoffset      >= maxypan) *yoffset      = maxypan;
+
+  oldx = gevent->x, oldy = gevent->y;
+
+  redraw_event(NULL, NULL, NULL);
+}
+
+// Handle the mouse arriving at a spot in the drawing area. Find what cell the
+// user is pointing at, highlight it, and show information about it.
+static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
+                          GdkEventMotion * gevent,
+                          __attribute__((unused)) gpointer data)
+{
+  if(gevent == NULL) return TRUE; // shouldn't happen
+  if(theevents.empty()) return TRUE; // No coordinates in this case
+
+  if(gevent->state & GDK_BUTTON1_MASK){
+    dopanning(gevent);
+    return TRUE;
+  }
+
+  const int oldactive_plane = active_plane;
+  const int oldactive_cell  = active_cell;
+
+  active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
+  active_cell  = screen_to_activecell((int)gevent->x, (int)gevent->y);
+
+  change_highlighted_cell(edarea, oldactive_plane, oldactive_cell);
+  set_eventn_status2();
+
+  return TRUE;
 }
 
 static gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
@@ -1058,8 +1113,11 @@ static void setup()
   g_signal_connect(edarea,"expose-event",G_CALLBACK(redraw_event),NULL);
   g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
   g_signal_connect(edarea, "scroll-event", G_CALLBACK(dozooming), NULL);
+  g_signal_connect(edarea, "button-press-event",
+                   G_CALLBACK(mousebuttonpress), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
                                 | GDK_POINTER_MOTION_MASK
+                                | GDK_BUTTON_PRESS_MASK
                                 | GDK_SCROLL_MASK);
 
   GtkWidget * next = gtk_button_new_with_mnemonic("_Next Event");

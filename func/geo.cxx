@@ -62,6 +62,19 @@ int scintpix_from_pixx(const int x)
   return int(x * scintdepth/(2*celldepth) + 0.5);
 }
 
+int get_xbox(const int pixels_x)
+{
+  return pixels_x*(nplanes_perview +
+         (first_mucatcher < nplanes?
+         nplanes_perview - first_mucatcher/2: 0)) + 1;
+}
+
+int get_ybox(const int pixels_y)
+{
+  return ncells_perplane*pixels_y
+         + pixels_y/2 /* cell stagger */ + 1 /* border */;
+}
+
 // Calculate the size of the bounding boxes for the detector's x and y
 // views, plus the muon catcher cutaway.  Resize the window to match.
 void setboxes()
@@ -70,12 +83,9 @@ void setboxes()
   // boxes could zoom naturally.  Well, at the moment that would be circular
   // for y because we set both ymins here.  This could be pulled out.
 
-  const int ybox = ncells_perplane*pixy
-                    + pixy/2 /* cell stagger */ + 1 /* border */;
+  const int ybox = get_ybox(pixy);
 
-  const int xbox = pixx*(nplanes_perview +
-               (first_mucatcher < nplanes?
-               nplanes_perview - first_mucatcher/2: 0)) + 1;
+  const int xbox = get_xbox(pixx);
 
   const int xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */;
 
