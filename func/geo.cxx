@@ -7,8 +7,8 @@ static const int FDnplanes_perview = 16 * 28,
                  FDfirst_mucatcher = 9999, // i.e. no muon catcher
                  FDncells_perplane = 12 * 32;
 
-const int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
-const int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
+int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
+int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
 
 int viewsep = 8; // vertical cell widths between x and y views
 
@@ -92,7 +92,7 @@ void setfd()
 
 // When we're zoomed, this stores the amount to the left of the screen
 // that the left/top of the first plane/cell is.
-int screenxoffset = 0, screenyoffset = 0;
+int screenxoffset = 0, screenyoffset_xview = 0, screenyoffset_yview = 0;
 
 int det_to_screen_x(const int plane)
 {
@@ -105,6 +105,7 @@ int det_to_screen_x(const int plane)
 
         // stagger x and y planes
       + xview*pixx/2
+
       - screenxoffset;
 }
 
@@ -115,13 +116,18 @@ int det_to_screen_y(const int plane, const int cell)
   // In each view, every other plane is offset by half a cell width
   const bool celldown = !((plane/2)%2 ^ (plane%2));
 
-  // put y view on the bottom
-  return pixy*(ncells_perplane*2 + viewsep - cell
-          - xview*(ncells_perplane + viewsep)) - (pixy-1)
+         // put y view on the bottom
+  return (!xview)*(ybox + viewsep - 1)
+
+         // cells numbered from the bottom
+         + pixy*(ncells_perplane-cell)
+
+         - (pixy-1)
 
          // Physical stagger of planes in each view
          + celldown*pixy/2
-         - screenyoffset;
+
+         - (xview?screenyoffset_xview:screenyoffset_yview);
 }
 
 bool screen_y_to_xview(const int y)
@@ -164,14 +170,15 @@ int screen_to_plane(const int x, const int y)
 
 int screen_to_cell(const int x, const int y)
 {
-  // Where y would be if not offset.  Do not pass into functions.
-  const int unoffsety = y + screenyoffset;
-
   const bool xview = screen_y_to_xview(y);
+
+  // Where y would be if not offset.  Do not pass into functions.
+  const int unoffsety = y + (xview?screenyoffset_xview:screenyoffset_yview);
+
   const int plane = screen_to_plane(x, y);
   const bool celldown = !((plane/2)%2 ^ (plane%2));
   const int effy = (xview? unoffsety
-                         : unoffsety - ybox - viewsep*pixy + 1)
+                         : unoffsety - ybox - viewsep + 1)
                    - celldown*(pixy/2) - 2;
 
   const int c = ncells_perplane - effy/pixy - 1;

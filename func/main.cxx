@@ -37,6 +37,8 @@ TODO:
 * Skip over user events when there are too many of them to handle,
 particularly when mousing over lots of hits in a busy event.
 
+* Adapt to the window size intelligently.
+
 */
 
 #include <gtk/gtk.h>
@@ -74,8 +76,8 @@ static int gevi = 0;
 extern int first_mucatcher, ncells_perplane;
 extern int nplanes;
 extern int pixx, pixy;
-const extern int FDpixy, FDpixx;
-const extern int NDpixy, NDpixx;
+extern int FDpixy, FDpixx;
+extern int NDpixy, NDpixx;
 extern int ybox, xboxnomu, yboxnomu, xbox;
 extern bool isfd;
 
@@ -236,8 +238,10 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   // If the zoom carries this hit out of the view in screen y, don't
   // display it.
   const bool xview = thishit.plane%2 == 1;
-  if(screen_y_to_xview(screeny) ^ xview) return;
-  if(xview && screeny > ybox) return;
+
+  if(xview && screeny+pixy-1 > ybox) return;
+  if(!xview && screeny      < ybox+viewsep) return;
+  if(!xview && screeny+pixy-1 > 2*ybox+viewsep) return;
 
   float red, green, blue;
 
@@ -479,7 +483,7 @@ static void request_edarea_size()
 {
   gtk_widget_set_size_request(edarea,
     xbox + 2 /* border */ + pixx/2 /* plane stagger */,
-    ybox*2 + viewsep);
+    ybox*2 + viewsep + 2);
 }
 
 // draw_event_and to_next_free_run circularly refer to each other...
@@ -736,13 +740,15 @@ static void getuserevent()
   handle_event();
 }
 
-extern int screenxoffset, screenyoffset;
+extern int screenxoffset, screenyoffset_xview, screenyoffset_yview;
 static gboolean mousebutton(__attribute__((unused)) GtkWidget * widg,
                             GdkEventScroll * gevent,
                             __attribute__((unused)) gpointer data)
 {
   const bool up = gevent->direction == GDK_SCROLL_UP;
 
+  const bool xview = screen_y_to_xview((int)gevent->y);
+  int * yoffset = xview?&screenyoffset_xview:&screenyoffset_yview;
   const int plane = screen_to_plane((int)gevent->x, (int)gevent->y);
   const int cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
 
@@ -755,18 +761,21 @@ static gboolean mousebutton(__attribute__((unused)) GtkWidget * widg,
 
   pixx = pixx_from_pixy(pixy);
 
+  // Pick offsets that keep the center of the cell the pointer is over
+  // under the pointer.  There may be a small shift since we don't check the
+  // offset within the cell.
   const int newtoleft = det_to_screen_x(plane) + pixx/2;
   screenxoffset += newtoleft - (int)gevent->x;
   if(screenxoffset < 0) screenxoffset = 0;
 
   const int newtotop = det_to_screen_y(plane, cell) + pixy/2;
-  screenyoffset += newtotop - (int)gevent->y;
-  if(screenyoffset < 0) screenyoffset = 0;
+  *yoffset += newtotop - (int)gevent->y;
+  if(*yoffset < 0) *yoffset = 0;
 
   // If we're back at the unzoomed view, clear offsets, even though this
   // violates the "don't move the hit under the mouse pointer" rule.
   if((isfd && pixx == FDpixx) || (!isfd && pixx == NDpixx))
-    screenxoffset = screenyoffset = 0;
+    screenxoffset = screenyoffset_yview = screenyoffset_xview = 0;
 
   redraw_event(NULL, NULL, NULL);
 
