@@ -85,6 +85,10 @@ void noe::produce(art::Event& evt)
     _exit(0);
   }
 
+  art::Handle< std::vector<rb::Track> > tracks;
+  try{evt.getByLabel("kalmantrackmerge", tracks); }
+  catch(...){;}
+
 #if 0
   if(theevents.empty()) add_test_nd_event();
 #endif
@@ -110,6 +114,25 @@ void noe::produce(art::Event& evt)
     thehit.good_tns = c.GoodTiming();
     ev.addhit(thehit);
   }
+  if(tracks.isValid()){
+    for(unsigned int i = 0; i < tracks->size(); i++){
+      track thetrack;
+      thetrack.startx = (*tracks)[i].Start().X();
+      thetrack.starty = (*tracks)[i].Start().Y();
+      thetrack.startz = (*tracks)[i].Start().Z();
+      thetrack.stopx = (*tracks)[i].Stop().X();
+      thetrack.stopy = (*tracks)[i].Stop().Y();
+      thetrack.stopz = (*tracks)[i].Stop().Z();
+      for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
+        hit thehit;
+        thehit.cell = (*tracks)[i].Cell(c)->Cell();
+        thehit.plane = (*tracks)[i].Cell(c)->Plane();
+        thetrack.hits.push_back(thehit);
+      }
+      ev.addtrack(thetrack);
+    }
+  }
+
   theevents.push_back(ev);
 
   realmain(false);

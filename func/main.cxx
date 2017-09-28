@@ -214,32 +214,21 @@ static void draw_background(cairo_t * cr)
   cairo_set_source_rgb(cr, 1, 0, 1);
   cairo_set_line_width(cr, 1.0);
 
-  if(zoomed()){
-    cairo_move_to(cr, screenxview.xmin,   0.5+screenxview.ymax());
-    cairo_line_to(cr, screenxview.xmax(), 0.5+screenxview.ymax());
-    cairo_stroke(cr);
+  // X-view box
+  cairo_rectangle(cr, 0.5+screenxview.xmin, 0.5+screenxview.ymin,
+                      screenxview.xsize, screenxview.ysize);
+  cairo_stroke(cr);
 
-    cairo_move_to(cr, screenyview.xmin,   0.5+screenyview.ymin);
-    cairo_line_to(cr, screenyview.xmax(), 0.5+screenyview.ymin);
-    cairo_stroke(cr);
-  }
-  else{
-    // X-view box
-    cairo_rectangle(cr, 0.5+screenxview.xmin, 0.5+screenxview.ymin,
-                        screenxview.xsize, screenxview.ysize);
-    cairo_stroke(cr);
+  // Y-view main box
+  cairo_rectangle(cr, 0.5+screenyview.xmin, 0.5+screenyview.ymin,
+                      screenyview.xsize, screenyview.ysize);
+  cairo_stroke(cr);
 
-    // Y-view main box
-    cairo_rectangle(cr, 0.5+screenyview.xmin, 0.5+screenyview.ymin,
-                        screenyview.xsize, screenyview.ysize);
+  // Y-view muon catcher empty box
+  if(first_mucatcher < nplanes){
+    cairo_rectangle(cr, 0.5+screenmu.xmin, 0.5+screenmu.ymin,
+                        screenmu.xsize, screenmu.ysize);
     cairo_stroke(cr);
-
-    // Y-view muon catcher empty box
-    if(first_mucatcher < nplanes){
-      cairo_rectangle(cr, 0.5+screenmu.xmin, 0.5+screenmu.ymin,
-                          screenmu.xsize, screenmu.ysize);
-      cairo_stroke(cr);
-    }
   }
 }
 
@@ -247,6 +236,31 @@ static bool visible_hit(const int32_t tdc)
 {
   return tdc <= theevents[gevi].current_maxtick &&
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
+}
+
+// Draw a single hit to the screen, taking into account whether it is the
+// "active" hit (i.e. being moused over right now).
+static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
+{
+  if(hit1.plane%2 ^ hit2.plane%2) return;
+
+  rect & screenview = hit1.plane%2 == 1?screenxview:screenyview;
+
+  const int screenx1 = det_to_screen_x(hit1.plane);
+  const int screenx2 = det_to_screen_x(hit2.plane);
+  if(screenx1      < screenview.xmin) return;
+  if(screenx1+pixx > screenview.xmax()) return;
+
+  const int screeny1 = det_to_screen_y(hit1.plane, hit1.cell);
+  const int screeny2 = det_to_screen_y(hit2.plane, hit2.cell);
+  if(screeny1      < screenview.ymin) return;
+  if(screeny1+pixy > screenview.ymax()) return;
+
+  cairo_set_source_rgb(cr, 0, 1, 1);
+
+  cairo_move_to(cr, screenx1+pixx/2, screeny1+pixy/2);
+  cairo_line_to(cr, screenx2+pixx/2, screeny2+pixy/2);
+  cairo_stroke(cr);
 }
 
 // Draw a single hit to the screen, taking into account whether it is the
@@ -423,6 +437,14 @@ static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
       set_eventn_status2progress(i, THEhits.size());
 
     draw_hit(cr, thishit);
+  }
+
+  for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
+    for(unsigned int h = 0; h < theevents[gevi].tracks[i].hits.size()-1; h++){
+      const hit & hh1 = theevents[gevi].tracks[i].hits[h];
+      const hit & hh2 = theevents[gevi].tracks[i].hits[h+1];
+      draw_trackseg(cr, hh1, hh2);
+    }
   }
 }
 
