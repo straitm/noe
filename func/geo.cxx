@@ -20,7 +20,11 @@ int nplanes_perview = NDnplanes_perview,
     ncells_perplane = NDncells_perplane;
 int nplanes = 2*nplanes_perview;
 int pixx = NDpixx, pixy = NDpixy;
-int ybox, xboxnomu, yboxnomu, xbox;
+
+// The screen coordinates of the x and y view and muon catcher cutout,
+// from the upper left corner of the border to the lower right corner
+// of the inside.
+rect screenxview, screenyview, screenmu;
 
 static const double ExtruDepth      = 66.1  ; // mm
 static const double ExtruWallThick  =  5.1  ;
@@ -62,16 +66,39 @@ int scintpix_from_pixx(const int x)
 // views, plus the muon catcher cutaway.  Resize the window to match.
 void setboxes()
 {
-  ybox = ncells_perplane*pixy + pixy/2 /* cell stagger */,
-  xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */,
+  const int ybox = ncells_perplane*pixy
+                    + pixy/2 /* cell stagger */ + 1 /* border */;
+
+  const int xbox = pixx*(nplanes_perview +
+               (first_mucatcher < nplanes?
+               nplanes_perview - first_mucatcher/2: 0)) + 1;
+
+  const int xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */;
 
   // muon catcher is 1/3 empty.  Do not include cell stagger here since we want
   // the extra half cells to be inside the active box.
-  yboxnomu = (ncells_perplane/3)*pixy,
+  const int yboxnomu = (ncells_perplane/3)*pixy;
 
-  xbox = pixx*(nplanes_perview +
-               (first_mucatcher < nplanes?
-               nplanes_perview - first_mucatcher/2: 0));
+  screenxview.xmin = pixx/2 /* plane stagger */;
+  screenxview.ymin = 0;
+  screenxview.xsize = xbox;
+  screenxview.ysize = ybox;
+
+  const bool hasmucatch = first_mucatcher < nplanes;
+
+  // In the x view the blank spaces are to the left of the hits, but in
+  // the y view, they are to the right, but I don't want the box to include them.
+  const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
+
+  screenyview.xmin = 0;
+  screenyview.ymin = ybox + viewsep - pixy/2 /* cell stagger */;
+  screenyview.xsize = xbox-hacky_subtraction_for_y_mucatch;
+  screenyview.ysize = ybox;
+
+  screenmu.xmin = 1 + xboxnomu;
+  screenmu.ymin = ybox + viewsep - pixy/2;
+  screenmu.xsize = xbox-xboxnomu-hacky_subtraction_for_y_mucatch;
+  screenmu.ysize = yboxnomu;
 }
 
 void setfd()
@@ -116,8 +143,7 @@ int det_to_screen_y(const int plane, const int cell)
   // In each view, every other plane is offset by half a cell width
   const bool celldown = !((plane/2)%2 ^ (plane%2));
 
-         // put y view on the bottom
-  return (!xview)*(ybox + viewsep - 1)
+  return (xview?screenxview.ymin:screenyview.ymin)
 
          // cells numbered from the bottom
          + pixy*(ncells_perplane-cell)
@@ -133,7 +159,7 @@ int det_to_screen_y(const int plane, const int cell)
 bool screen_y_to_xview(const int y)
 {
   // unaffected by zooming  The xview always owns the top half of the screen
-  return y <= 2 /* border */ + ybox + viewsep/2;
+  return y <= (screenxview.ymin + screenxview.ysize + screenyview.ymin)/2;
 }
 
 int screen_to_plane(const int x, const int y)
@@ -178,7 +204,7 @@ int screen_to_cell(const int x, const int y)
   const int plane = screen_to_plane(x, y);
   const bool celldown = !((plane/2)%2 ^ (plane%2));
   const int effy = (xview? unoffsety
-                         : unoffsety - ybox - viewsep + 1)
+                         : unoffsety - screenyview.ymin)
                    - celldown*(pixy/2) - 2;
 
   const int c = ncells_perplane - effy/pixy - 1;

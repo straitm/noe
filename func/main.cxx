@@ -78,7 +78,7 @@ extern int nplanes;
 extern int pixx, pixy;
 extern int FDpixy, FDpixx;
 extern int NDpixy, NDpixx;
-extern int ybox, xboxnomu, yboxnomu, xbox;
+extern rect screenxview, screenyview, screenmu;
 extern bool isfd;
 
 /* GTK objects */
@@ -199,24 +199,19 @@ static void draw_background(cairo_t * cr)
   cairo_set_line_width(cr, 1.0);
 
   // X-view box
-  cairo_rectangle(cr, 0.5+pixx/2 /* plane stagger */, 0.5, xbox+1, ybox+1);
+  cairo_rectangle(cr, 0.5+screenxview.xmin, 0.5+screenxview.ymin,
+                      screenxview.xsize, screenxview.ysize);
   cairo_stroke(cr);
 
-  const bool hasmucatch = first_mucatcher < nplanes;
-
-  // In the x view the blank spaces are to the left of the hits, but in
-  // the y view, they are to the right, but I don't want the box to include them.
-  const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
-
   // Y-view main box
-  cairo_rectangle(cr, 0.5, 0.5 + ybox + viewsep - pixy/2 /* cell stagger */,
-                      xbox+1-hacky_subtraction_for_y_mucatch, ybox+1);
+  cairo_rectangle(cr, 0.5+screenyview.xmin, 0.5+screenyview.ymin,
+                      screenyview.xsize, screenyview.ysize);
   cairo_stroke(cr);
 
   // Y-view muon catcher empty box
-  if(hasmucatch){
-    cairo_rectangle(cr, 1.5 + xboxnomu, 0.5 + ybox + viewsep - pixy/2,
-                        xbox-xboxnomu-hacky_subtraction_for_y_mucatch, yboxnomu);
+  if(first_mucatcher < nplanes){
+    cairo_rectangle(cr, 0.5+screenmu.xmin, 0.5+screenmu.ymin,
+                        screenmu.xsize, screenmu.ysize);
     cairo_stroke(cr);
   }
 }
@@ -226,7 +221,6 @@ static bool visible_hit(const int32_t tdc)
   return tdc <= theevents[gevi].current_maxtick &&
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
 }
-
 
 // Draw a single hit to the screen, taking into account whether it is the
 // "active" hit (i.e. being moused over right now).
@@ -238,10 +232,9 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   // If the zoom carries this hit out of the view in screen y, don't
   // display it.
   const bool xview = thishit.plane%2 == 1;
-
-  if(xview && screeny+pixy-1 > ybox) return;
-  if(!xview && screeny      < ybox+viewsep) return;
-  if(!xview && screeny+pixy-1 > 2*ybox+viewsep) return;
+  if( xview && screeny+pixy > screenxview.ymin + screenxview.ysize) return;
+  if(!xview && screeny      < screenyview.ymin) return;
+  if(!xview && screeny+pixy > screenyview.ymin + screenyview.ysize) return;
 
   float red, green, blue;
 
@@ -482,8 +475,8 @@ static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
 static void request_edarea_size()
 {
   gtk_widget_set_size_request(edarea,
-    xbox + 2 /* border */ + pixx/2 /* plane stagger */,
-    ybox*2 + viewsep + 2);
+    screenxview.xmin + screenxview.xsize + 1,
+    screenyview.ymin + screenyview.ysize + 1);
 }
 
 // draw_event_and to_next_free_run circularly refer to each other...

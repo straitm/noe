@@ -1,3 +1,8 @@
+struct rect{
+  int xmin, ymin;
+  int xsize, ysize;
+};
+
 // Given the number of pixels used for the vertical extent of a hit in one
 // plane, return the number of pixels we should use the for the vertical
 // extent.
