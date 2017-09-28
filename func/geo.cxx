@@ -66,7 +66,9 @@ int scintpix_from_pixx(const int x)
 // views, plus the muon catcher cutaway.  Resize the window to match.
 void setboxes()
 {
-  // TODO why not use the det_to_screen_x/y functions to get these?
+  // TODO why not use the det_to_screen_x/y functions to get these?  Then the
+  // boxes could zoom naturally.  Well, at the moment that would be circular
+  // for y because we set both ymins here.  This could be pulled out.
 
   const int ybox = ncells_perplane*pixy
                     + pixy/2 /* cell stagger */ + 1 /* border */;

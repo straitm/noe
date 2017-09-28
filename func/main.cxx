@@ -79,6 +79,7 @@ extern int pixx, pixy;
 extern int FDpixy, FDpixx;
 extern int NDpixy, NDpixx;
 extern rect screenxview, screenyview, screenmu;
+extern int screenxoffset, screenyoffset_xview, screenyoffset_yview;
 extern bool isfd;
 
 /* GTK objects */
@@ -749,10 +750,9 @@ static void getuserevent()
   handle_event();
 }
 
-extern int screenxoffset, screenyoffset_xview, screenyoffset_yview;
-static gboolean mousebutton(__attribute__((unused)) GtkWidget * widg,
-                            GdkEventScroll * gevent,
-                            __attribute__((unused)) gpointer data)
+static gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
+                          GdkEventScroll * gevent,
+                          __attribute__((unused)) gpointer data)
 {
   const bool up = gevent->direction == GDK_SCROLL_UP;
 
@@ -1057,7 +1057,7 @@ static void setup()
   g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
   g_signal_connect(edarea,"expose-event",G_CALLBACK(redraw_event),NULL);
   g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
-  g_signal_connect(edarea, "scroll-event", G_CALLBACK(mousebutton), NULL);
+  g_signal_connect(edarea, "scroll-event", G_CALLBACK(dozooming), NULL);
   gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
                                 | GDK_POINTER_MOTION_MASK
                                 | GDK_SCROLL_MASK);
