@@ -80,7 +80,10 @@ void noe::produce(art::Event& evt)
 
   art::Handle< std::vector<rb::CellHit> > cellhits;
 
-  evt.getByLabel("calhit", cellhits);
+  if(!evt.getByLabel("calhit", cellhits)){
+    fprintf(stderr, "NOE needs a file with calhits in it.\n");
+    _exit(0);
+  }
 
 #if 0
   if(theevents.empty()) add_test_nd_event();

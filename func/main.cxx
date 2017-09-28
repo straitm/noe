@@ -36,6 +36,8 @@ TODO:
 
 * Adapt to the window size intelligently.
 
+* Add some reconstructed information.
+
 */
 
 #include <gtk/gtk.h>
