@@ -560,7 +560,19 @@ static gboolean animation_step(__attribute__((unused)) gpointer data)
                                            :E.current_maxtick-(TDCSTEP-1);
   drawpars.lasttick  = E.current_maxtick;
   draw_event(&drawpars);
-  return animate && E.current_maxtick < theevents[gevi].user_maxtick;
+
+  const bool stillanimating =
+    animate && E.current_maxtick < theevents[gevi].user_maxtick;
+
+  // If we are animating and free running, go directly to the next event
+  // at the end of this one, not worrying about the free run delay. This
+  // avoids the need to switch back and forth between timers. Keep the
+  // animation timer running unless this was the last event, as signaled
+  // by the return value of to_next_free_run().
+  if(!stillanimating && free_running)
+    return to_next_free_run(NULL);
+
+  return stillanimating;
 }
 
 static gboolean handle_event()
@@ -847,32 +859,43 @@ static gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
   return TRUE;
 }
 
+static void stop_freerun_timer()
+{
+  if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
+  freeruntimeoutid = 0;
+}
+
+static void start_freerun_timer()
+{
+  stop_freerun_timer(); // just in case
+
+  // Do not call g_timeout_add with an interval of zero, since that
+  // seems to be a special case that causes the function to be run
+  // repeatedly *without* returning to the main loop, or without
+  // doing all the things in the main loop that are usually done, or
+  // something. In any case, empirically, it causes multiple (infinite?)
+  // calls to to_next_free_run after gtk_main_quit() has been called,
+  // which locks us up. It is quite possible that by setting the
+  // interval to 1, it only makes it *unlikely* that further events are
+  // processed between gtk_main_quit() and exiting the main loop, in
+  // which case I have a bug that has only been suppressed instead of
+  // fixed.
+  freeruntimeoutid =
+    g_timeout_add(std::max((gulong)1, freeruninterval), to_next_free_run, NULL);
+}
+
 // Handle the user clicking the "run freely" check box.
 static void toggle_freerun(__attribute__((unused)) GtkWidget * w,
                            __attribute__((unused)) gpointer dt)
 {
   free_running = GTK_TOGGLE_BUTTON(w)->active;
-  if(free_running)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(animate_checkbox), FALSE);
 
-  if(free_running){
-    // Do not call g_timeout_add with an interval of zero, since that seems
-    // to be a special case that causes the function to be run repeatedly
-    // *without* returning to the main loop, or without doing all the things
-    // in the main loop that are usually done, or something. In any case,
-    // empirically, it causes multiple (infinite?) calls to to_next_free_run
-    // after gtk_main_quit() has been called, which locks us up. It is quite
-    // possible that by setting the interval to 1, it only makes it *unlikely*
-    // that further events are processed between gtk_main_quit() and exiting
-    // the main loop, in which case I have a bug that has only been suppressed
-    // instead of fixed.
-    freeruntimeoutid =
-      g_timeout_add(std::max((gulong)1, freeruninterval), to_next_free_run, NULL);
-  }
-  else{
-    if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
-    freeruntimeoutid = 0;
-  }
+  // If free running *and* animating, the animation timer will handle
+  // switching to the next event.
+  if(free_running && !animate) start_freerun_timer();
+  else                         stop_freerun_timer();
+
+  handle_event();
 }
 
 // Handle the user clicking the "cumulative animation" check box.
@@ -931,10 +954,14 @@ static void toggle_animate(GtkWidget * w, __attribute__((unused)) gpointer dt)
 {
   animate = GTK_TOGGLE_BUTTON(w)->active;
   if(animate){
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox), FALSE);
+    // If free running *and* animating, the animation timer will handle
+    // switching to the next event.
+    stop_freerun_timer();
     set_intervals(gtk_adjustment_get_value(GTK_ADJUSTMENT(speedadj)));
   }
   else{
+    // If we stop animating, the free run timer has to take over free running
+    if(free_running) start_freerun_timer();
     TDCSTEP = 1;
   }
 
@@ -990,9 +1017,7 @@ static void adjustspeed(GtkWidget * wg,
   set_intervals(gtk_adjustment_get_value(GTK_ADJUSTMENT(wg)));
 
   if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
-  if(free_running)
-    freeruntimeoutid =
-      g_timeout_add(std::max((gulong)1,freeruninterval), to_next_free_run, NULL);
+  if(free_running && !animate) start_freerun_timer();
 
   if(animatetimeoutid) g_source_remove(animatetimeoutid);
   if(animate)
