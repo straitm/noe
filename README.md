@@ -1,4 +1,4 @@
-[![NOE animation example: a Monte Carlo monopole overlayed with data cosmics](noe-example-monopole-thumb.gif)](noe-example-monopole.gif?raw=true)
+[![NOE animation example: a Monte Carlo monopole overlayed with data cosmics](noe-example-monopole-thumb.gif)](noe-example-monopole.gif?raw=true "NOE animation example: a Monte Carlo monopole overlayed with data cosmics. Follow the link for a full-sized image.")
 
 # NOE
 
