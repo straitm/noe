@@ -1,3 +1,6 @@
+[![NOE animation example: a Monte Carlo monpoole overlayed with data cosmics]
+(noe-example-monopole-thumb.gif)](noe-example-monopole.gif)
+
 # NOE
 
 This is NOE, a new event display for NOvA, meant to be complementary to
@@ -30,7 +33,7 @@ A non-exhaustive list of things that are not priorities:
 
 # Running it
 
-nova -c noejob.fcl <art file>
+nova -c noejob.fcl artfile.root
 
 The art file must have calibrated hits in it, i.e. rb::CellHits with the
 label "calhit".  NOE does not run on artdaq files.
