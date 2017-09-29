@@ -413,14 +413,15 @@ static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
   const int big = 100000;
   const bool bigevent = THEhits.size() > big;
 
+  int ndrawn = 0;
   for(unsigned int i = 0; i < THEhits.size(); i++){
     const hit & thishit = THEhits[i];
 
     if(thishit.tdc < drawpars->firsttick ||
        thishit.tdc > drawpars->lasttick) continue;
 
-    if(bigevent && i%big == 0)
-      set_eventn_status2progress(i, THEhits.size());
+    if(bigevent && (++ndrawn)%big == 0)
+      set_eventn_status2progress(ndrawn, THEhits.size());
 
     draw_hit(cr, thishit);
   }
@@ -556,8 +557,7 @@ static gboolean animation_step(__attribute__((unused)) gpointer data)
   // become visible when moused over.
   if(!cumulative_animation) E.current_mintick = E.current_maxtick;
 
-  drawpars.firsttick = cumulative_animation?E.current_mintick
-                                           :E.current_maxtick-(TDCSTEP-1);
+  drawpars.firsttick = E.current_maxtick-(TDCSTEP-1);
   drawpars.lasttick  = E.current_maxtick;
   draw_event(&drawpars);
 
