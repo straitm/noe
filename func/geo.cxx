@@ -151,7 +151,10 @@ int det_to_screen_x(const int plane)
   return 1 + // Don't overdraw the border
     pixx*((plane
 
-         // space out the muon catcher planes
+         // space out the muon catcher planes so they are twice as far
+         // apart as normal.  This is very close to right, since the depth
+         // of (two scintillator planes + one steel plane + air gaps) is
+         // within 10% of the depth of two sintillator planes.
          +(plane > first_mucatcher?plane-first_mucatcher:0))/2)
 
         // stagger x and y planes

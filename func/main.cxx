@@ -30,10 +30,6 @@ TODO:
 
 * Animate by TNS times instead of TDC.  Be able to switch between?
 
-* Allow animation and free running at the same time.
-
-* Space out muon catcher planes more accurately.
-
 * Adapt to the window size intelligently.
 
 * Add some reconstructed information.
