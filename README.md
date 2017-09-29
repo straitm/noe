@@ -1,4 +1,7 @@
-[![NOE animation example: a Monte Carlo monopole overlayed with data cosmics](noe-example-monopole-thumb.gif)](noe-example-monopole.gif?raw=true "NOE animation example: a Monte Carlo monopole overlayed with data cosmics. Follow the link for a full-sized image.")
+[![NOE animation example: a Monte Carlo monopole overlayed with data
+cosmics](noe-example-monopole-thumb.gif)](noe-example-monopole.gif?raw=true
+"NOE animation example: a Monte Carlo monopole overlayed with data cosmics.
+Follow the link for a full-sized image.")
 
 # NOE
 
@@ -29,6 +32,11 @@ A non-exhaustive list of things that are not priorities:
 * Have automatic availability of new types of reconstructed objects. 
   Most likely only a fixed list of the most commonly used objects will
   be available.
+
+# Compiling it
+
+Check out this repository into a test release (so that you end up
+with .../test-release/noe/), and then build the test release as usual.
 
 # Running it
 
