@@ -1,6 +1,15 @@
 #include "noe.fcl"
+# for geometry for tracks
+#include "services.fcl"
 
 process_name: noe
+
+services:
+{
+  # For tracks
+  Geometry: @local::standard_geo
+  Detector: @local::standard_detector
+}
 
 physics:
 {

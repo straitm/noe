@@ -8,6 +8,8 @@ struct track{
   float startx, starty, startz;
   float stopx, stopy, stopz;
   std::vector<hit> hits;
+  std::vector<hit> trajx; // maybe want better precision than hit level?
+  std::vector<hit> trajy;
 };
 
 struct noeevent{
@@ -43,8 +45,7 @@ struct noeevent{
 
   void addtrack(__attribute__((unused)) const track & t)
   {
-    // This isn't well developed, so just don't.
-    //tracks.push_back(t);
+    tracks.push_back(t);
   }
 
   void addhit(const hit & h)

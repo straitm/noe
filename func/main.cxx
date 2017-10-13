@@ -238,8 +238,6 @@ static bool visible_hit(const int32_t tdc)
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
 }
 
-// Draw a single hit to the screen, taking into account whether it is the
-// "active" hit (i.e. being moused over right now).
 static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
 {
   if(hit1.plane%2 ^ hit2.plane%2) return;
@@ -414,6 +412,15 @@ static void set_eventn_status()
   set_eventn_status2();
 }
 
+static void draw_tracks_in_one_view(cairo_t * cr, const std::vector<hit> & traj)
+{
+  for(unsigned int h = 0; h < traj.size()-1; h++){
+    const hit & hh1 = traj[h];
+    const hit & hh2 = traj[h+1];
+    draw_trackseg(cr, hh1, hh2);
+  }
+}
+
 // Draw all the hits in the event that we need to draw, depending on
 // whether we are animating or have been exposed, etc.
 static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
@@ -439,12 +446,10 @@ static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
     draw_hit(cr, thishit);
   }
 
+  // XXX probably shouldn't be inside of draw_hits()
   for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
-    for(unsigned int h = 0; h < theevents[gevi].tracks[i].hits.size()-1; h++){
-      const hit & hh1 = theevents[gevi].tracks[i].hits[h];
-      const hit & hh2 = theevents[gevi].tracks[i].hits[h+1];
-      draw_trackseg(cr, hh1, hh2);
-    }
+    draw_tracks_in_one_view(cr, theevents[gevi].tracks[i].trajx);
+    draw_tracks_in_one_view(cr, theevents[gevi].tracks[i].trajy);
   }
 }
 

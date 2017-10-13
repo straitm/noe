@@ -6,6 +6,9 @@
 #include "art/Framework/Core/ModuleMacros.h"
 
 #include "RecoBase/CellHit.h"
+
+// For tracks
+#include "Geometry/Geometry.h"
 #include "RecoBase/Track.h"
 
 #include "func/main.h"
@@ -78,6 +81,9 @@ void noe::produce(art::Event& evt)
 {
   signal(SIGINT, SIG_DFL); // just exit on Ctrl-C
 
+  // Not needed for hits, just for tracks
+  art::ServiceHandle<geo::Geometry> geo;
+
   art::Handle< std::vector<rb::CellHit> > cellhits;
 
   if(!evt.getByLabel("calhit", cellhits)){
@@ -86,7 +92,7 @@ void noe::produce(art::Event& evt)
   }
 
   art::Handle< std::vector<rb::Track> > tracks;
-  try{evt.getByLabel("kalmantrackmerge", tracks); }
+  try{evt.getByLabel("breakpoint", tracks); }
   catch(...){;}
 
 #if 0
@@ -128,6 +134,23 @@ void noe::produce(art::Event& evt)
         thehit.cell = (*tracks)[i].Cell(c)->Cell();
         thehit.plane = (*tracks)[i].Cell(c)->Plane();
         thetrack.hits.push_back(thehit);
+      }
+      for(unsigned int p = 0; p < (*tracks)[i].NTrajectoryPoints(); p++){
+        const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
+        int plane, cell;
+        try{
+          geo->getPlaneAndCellID(tp.X(), tp.Y(), tp.Z(), plane, cell);
+          hit thehit;
+          thehit.cell = cell;
+          thehit.plane = plane;
+          if(plane%2 == 1) thetrack.trajx.push_back(thehit);
+          else             thetrack.trajy.push_back(thehit);
+        }
+        catch(cet::exception e){
+          // If the unique cell id doesn't decode to a cell and plane, just
+          // ignore the point.
+          ;
+        }
       }
       ev.addtrack(thetrack);
     }
