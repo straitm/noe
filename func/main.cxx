@@ -248,11 +248,15 @@ static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
   const int screenx2 = det_to_screen_x(hit2.plane);
   if(screenx1      < screenview.xmin) return;
   if(screenx1+pixx > screenview.xmax()) return;
+  if(screenx2      < screenview.xmin) return;
+  if(screenx2+pixx > screenview.xmax()) return;
 
   const int screeny1 = det_to_screen_y(hit1.plane, hit1.cell);
   const int screeny2 = det_to_screen_y(hit2.plane, hit2.cell);
   if(screeny1      < screenview.ymin) return;
   if(screeny1+pixy > screenview.ymax()) return;
+  if(screeny2      < screenview.ymin) return;
+  if(screeny2+pixy > screenview.ymax()) return;
 
   cairo_set_source_rgb(cr, 0, 1, 1);
 
