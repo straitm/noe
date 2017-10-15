@@ -1,4 +1,4 @@
-SUBDIRS := func
+SUBDIRS := func fcl
 
 LIB_TYPE    := shared
 LIB         := lib$(PACKAGE)
