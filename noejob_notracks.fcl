@@ -1,0 +1,16 @@
+#include "noe.fcl"
+
+process_name: noe
+
+UUDDLRLRBAS: @local::standard_noe
+UUDDLRLRBAS.track_label: ""
+
+physics:
+{
+  producers:
+  {
+    noe: @local::UUDDLRLRBAS
+  }
+
+  reco: [ noe ]
+}

@@ -23,9 +23,16 @@ class noe : public art::EDProducer {
   ~noe();
   void produce(art::Event& evt);
   void endJob();
+
+  // The art label for tracks that we are going to display, or the
+  // empty string to display no tracks.
+  std::string fTrackLabel;
 };
 
-noe::noe(fhicl::ParameterSet const & pset) { }
+noe::noe(fhicl::ParameterSet const & pset)
+{
+  fTrackLabel = pset.get< std::string >("track_label");
+}
 
 noe::~noe() { }
 
@@ -81,8 +88,10 @@ void noe::produce(art::Event& evt)
 {
   signal(SIGINT, SIG_DFL); // just exit on Ctrl-C
 
-  // Not needed for hits, just for tracks
-  art::ServiceHandle<geo::Geometry> geo;
+  // Not needed for hits, just for tracks.  Aggressively don't load the
+  // Geometry if it isn't needed.
+  art::ServiceHandle<geo::Geometry> * geo =
+    fTrackLabel == ""? NULL: new art::ServiceHandle<geo::Geometry>;
 
   art::Handle< std::vector<rb::CellHit> > cellhits;
 
@@ -92,8 +101,13 @@ void noe::produce(art::Event& evt)
   }
 
   art::Handle< std::vector<rb::Track> > tracks;
-  try{evt.getByLabel("breakpoint", tracks); }
-  catch(...){;}
+  if(fTrackLabel != ""){
+    try{evt.getByLabel(fTrackLabel, tracks); }
+    catch(...){
+      fprintf(stderr,
+        "Warning: No tracks found with label \"%s\"\n", fTrackLabel.c_str());
+    }
+  }
 
 #if 0
   if(theevents.empty()) add_test_nd_event();
@@ -139,7 +153,7 @@ void noe::produce(art::Event& evt)
         const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
         int plane, cell;
         try{
-          geo->getPlaneAndCellID(tp.X(), tp.Y(), tp.Z(), plane, cell);
+          (*geo)->getPlaneAndCellID(tp.X(), tp.Y(), tp.Z(), plane, cell);
           hit thehit;
           thehit.cell = cell;
           thehit.plane = plane;

@@ -418,11 +418,9 @@ static void set_eventn_status()
 
 static void draw_tracks_in_one_view(cairo_t * cr, const std::vector<hit> & traj)
 {
-  for(unsigned int h = 0; h < traj.size()-1; h++){
-    const hit & hh1 = traj[h];
-    const hit & hh2 = traj[h+1];
-    draw_trackseg(cr, hh1, hh2);
-  }
+  if(traj.size() < 2) return;
+  for(unsigned int h = 0; h < traj.size()-1; h++)
+    draw_trackseg(cr, traj[h], traj[h+1]);
 }
 
 // Draw all the hits in the event that we need to draw, depending on

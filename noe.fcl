@@ -2,7 +2,12 @@ BEGIN_PROLOG
 
 standard_noe:
 {
- module_type:      noe
+  module_type:      noe
+
+  # By default, display BreakPointFitter tracks. The user can change
+  # this to another reconstruction, or can disable track display it by
+  # specifying "" (the empty string).
+  track_label: "breakpoint"
 }
 
 END_PROLOG
