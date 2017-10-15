@@ -24,7 +24,7 @@ int pixx = NDpixx, pixy = NDpixy;
 // The screen coordinates of the x and y view and muon catcher cutout,
 // from the upper left corner of the border to the lower right corner
 // of the inside.
-rect screenxview, screenyview, screenmu;
+rect screenview[kXorY], screenmu;
 
 static const double ExtruDepth      = 66.1  ; // mm
 static const double ExtruWallThick  =  5.1  ;
@@ -163,10 +163,10 @@ void setboxes()
   // the extra half cells to be inside the active box.
   const int yboxnomu = (ncells_perplane/3)*pixy;
 
-  screenxview.xmin = pixx/2 /* plane stagger */;
-  screenxview.ymin = get_xviewymin(pixy);
-  screenxview.xsize = xbox;
-  screenxview.ysize = ybox;
+  screenview[kX].xmin = pixx/2 /* plane stagger */;
+  screenview[kX].ymin = get_xviewymin(pixy);
+  screenview[kX].xsize = xbox;
+  screenview[kX].ysize = ybox;
 
   const bool hasmucatch = first_mucatcher < nplanes;
 
@@ -174,10 +174,10 @@ void setboxes()
   // the y view, they are to the right, but I don't want the box to include them.
   const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
 
-  screenyview.xmin = 0;
-  screenyview.ymin = get_yviewymin(pixy);
-  screenyview.xsize = xbox-hacky_subtraction_for_y_mucatch;
-  screenyview.ysize = ybox;
+  screenview[kY].xmin = 0;
+  screenview[kY].ymin = get_yviewymin(pixy);
+  screenview[kY].xsize = xbox-hacky_subtraction_for_y_mucatch;
+  screenview[kY].ysize = ybox;
 
   screenmu.xmin = 1 + xboxnomu;
   screenmu.ymin = ybox + viewsep - pixy/2;
@@ -185,22 +185,14 @@ void setboxes()
   screenmu.ysize = yboxnomu;
 }
 
-bool screen_y_to_xview(const int y)
-{
-  // unaffected by zooming  The xview always owns the top half of the screen
-  return y <= (screenxview.ymax() + screenyview.ymin)/2;
-}
-
-int screen_to_plane(const int x, const int y)
+int screen_to_plane(const noe_view_t view, const int x)
 {
   // Where x would be if not offset
   const int unoffsetx = x + screenxoffset;
 
-  const bool xview = screen_y_to_xview(y);
-
   // The number of the first muon catcher plane counting only planes
   // in one view.
-  const int halfmucatch = (first_mucatcher)/2 + !xview;
+  const int halfmucatch = (first_mucatcher)/2 + view == kY;
 
   // Account for the plane stagger and border width.
   int effx;
@@ -208,37 +200,35 @@ int screen_to_plane(const int x, const int y)
   else effx = unoffsetx - 2;
 
   // Half the plane number, as long as we're not in the muon catcher
-  int halfp = xview? (effx-pixx/2)/pixx
-                    :(    effx   )/pixx;
+  int halfp = view == kX? (effx-pixx/2)/pixx
+                        :(    effx   )/pixx;
 
   // Fix up the case of being in the muon catcher
   if(halfp > halfmucatch) halfp = halfmucatch +
                                   (halfp - halfmucatch)/2;
 
   // The plane number, except it might be out of range
-  const int p = halfp*2 + xview;
+  const int p = halfp*2 + view == kX;
 
-  if(p < xview) return -1;
+  if(p < (view == kX)) return -1; // XXX too clever
   if(p >= nplanes) return -1;
   return p;
 }
 
-int screen_to_cell(const int x, const int y)
+int screen_to_cell(const noe_view_t view, const int x, const int y)
 {
-  const bool xview = screen_y_to_xview(y);
-
   // Where y would be if not offset.  Do not pass into functions.
-  const int unoffsety = y + (xview?screenyoffset_xview:screenyoffset_yview);
+  const int unoffsety = y + (view == kX?screenyoffset_xview:screenyoffset_yview);
 
-  const int plane = screen_to_plane(x, y);
+  const int plane = screen_to_plane(view, x);
   const bool celldown = !((plane/2)%2 ^ (plane%2));
-  const int effy = (xview? unoffsety
-                         : unoffsety - screenyview.ymin)
+  const int effy = (view == kX? unoffsety
+                              : unoffsety - screenview[kY].ymin)
                    - celldown*(pixy/2) - 2;
 
   const int c = ncells_perplane - effy/pixy - 1;
   if(c < 0) return -1;
   if(c >= ncells_perplane) return -1;
-  if(plane >= first_mucatcher && !xview && c >= 2*ncells_perplane/3) return -1;
+  if(plane >= first_mucatcher && view == kY && c >= 2*ncells_perplane/3) return -1;
   return c;
 }

@@ -73,7 +73,7 @@ extern int nplanes;
 extern int pixx, pixy;
 extern int FDpixy, FDpixx;
 extern int NDpixy, NDpixx;
-extern rect screenxview, screenyview, screenmu;
+extern rect screenview[kXorY], screenmu;
 extern int screenxoffset, screenyoffset_xview, screenyoffset_yview;
 extern bool isfd;
 
@@ -82,7 +82,7 @@ static const int NSTATBOXES = 4;
 static GtkWidget * win = NULL;
 static GtkWidget * statbox[NSTATBOXES];
 static GtkTextBuffer * stattext[NSTATBOXES];
-static GtkWidget * edarea = NULL;
+static GtkWidget * edarea[2] = { NULL }; // X and Y views
 static GtkWidget * animate_checkbox = NULL,
                  * cum_ani_checkbox = NULL,
                  * freerun_checkbox = NULL;
@@ -202,29 +202,26 @@ __attribute__((unused)) static bool by_time(const hit & a, const hit & b)
 }
 
 // Blank the drawing area and draw the detector bounding boxes
-static void draw_background(cairo_t * cr)
+static void draw_background(cairo_t ** cr)
 {
-  cairo_set_source_rgb(cr, 0, 0, 0);
-  cairo_paint(cr);
+  for(int i = 0; i < 2; i++){
+    cairo_set_source_rgb(cr[i], 0, 0, 0);
+    cairo_paint(cr[i]);
 
-  cairo_set_source_rgb(cr, 1, 0, 1);
-  cairo_set_line_width(cr, 1.0);
+    cairo_set_source_rgb(cr[i], 1, 0, 1);
+    cairo_set_line_width(cr[i], 1.0);
 
-  // X-view box
-  cairo_rectangle(cr, 0.5+screenxview.xmin, 0.5+screenxview.ymin,
-                      screenxview.xsize, screenxview.ysize);
-  cairo_stroke(cr);
-
-  // Y-view main box
-  cairo_rectangle(cr, 0.5+screenyview.xmin, 0.5+screenyview.ymin,
-                      screenyview.xsize, screenyview.ysize);
-  cairo_stroke(cr);
+    // detector box
+    cairo_rectangle(cr[i], 0.5+screenview[i].xmin, 0.5+screenview[i].ymin,
+                               screenview[i].xsize,    screenview[i].ysize);
+    cairo_stroke(cr[i]);
+  }
 
   // Y-view muon catcher empty box
   if(first_mucatcher < nplanes){
-    cairo_rectangle(cr, 0.5+screenmu.xmin, 0.5+screenmu.ymin,
-                        screenmu.xsize, screenmu.ysize);
-    cairo_stroke(cr);
+    cairo_rectangle(cr[kY], 0.5+screenmu.xmin, 0.5+screenmu.ymin,
+                            screenmu.xsize, screenmu.ysize);
+    cairo_stroke(cr[kY]);
   }
 }
 
@@ -238,21 +235,21 @@ static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
 {
   if(hit1.plane%2 ^ hit2.plane%2) return;
 
-  rect & screenview = hit1.plane%2 == 1?screenxview:screenyview;
+  noe_view_t V = hit1.plane%2 == 1?kX:kY;
 
   const int screenx1 = det_to_screen_x(hit1.plane);
   const int screenx2 = det_to_screen_x(hit2.plane);
-  if(screenx1      < screenview.xmin) return;
-  if(screenx1+pixx > screenview.xmax()) return;
-  if(screenx2      < screenview.xmin) return;
-  if(screenx2+pixx > screenview.xmax()) return;
+  if(screenx1      < screenview[V].xmin) return;
+  if(screenx1+pixx > screenview[V].xmax()) return;
+  if(screenx2      < screenview[V].xmin) return;
+  if(screenx2+pixx > screenview[V].xmax()) return;
 
   const int screeny1 = det_to_screen_y(hit1.plane, hit1.cell);
   const int screeny2 = det_to_screen_y(hit2.plane, hit2.cell);
-  if(screeny1      < screenview.ymin) return;
-  if(screeny1+pixy > screenview.ymax()) return;
-  if(screeny2      < screenview.ymin) return;
-  if(screeny2+pixy > screenview.ymax()) return;
+  if(screeny1      < screenview[V].ymin) return;
+  if(screeny1+pixy > screenview[V].ymax()) return;
+  if(screeny2      < screenview[V].ymin) return;
+  if(screeny2+pixy > screenview[V].ymax()) return;
 
   cairo_set_source_rgb(cr, 0, 1, 1);
 
@@ -265,17 +262,17 @@ static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
 // "active" hit (i.e. being moused over right now).
 static void draw_hit(cairo_t * cr, const hit & thishit)
 {
-  rect & screenview = thishit.plane%2 == 1?screenxview:screenyview;
+  const noe_view_t V = thishit.plane%2 == 1?kX:kY;
 
   // Get position.  If the zoom carries this hit out of the view in screen y,
   // don't display it.
   const int screenx = det_to_screen_x(thishit.plane);
-  if(screenx      < screenview.xmin) return;
-  if(screenx+pixx > screenview.xmax()) return;
+  if(screenx      < screenview[V].xmin) return;
+  if(screenx+pixx > screenview[V].xmax()) return;
 
   const int screeny = det_to_screen_y(thishit.plane, thishit.cell);
-  if(screeny      < screenview.ymin) return;
-  if(screeny+pixy > screenview.ymax()) return;
+  if(screeny      < screenview[V].ymin) return;
+  if(screeny+pixy > screenview[V].ymax()) return;
 
   float red, green, blue;
 
@@ -301,14 +298,14 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   }
   // This is a smaller gain, but it is definitely faster by about 10%.
   else if(pixy == 2){
-    cairo_move_to(cr, screenx,      screeny+0.5);
+    cairo_move_to(cr, screenx,       screeny+0.5);
     cairo_line_to(cr, screenx+epixx, screeny+0.5);
-    cairo_move_to(cr, screenx,      screeny+1.5);
+    cairo_move_to(cr, screenx,       screeny+1.5);
     cairo_line_to(cr, screenx+epixx, screeny+1.5);
   }
   else{
     cairo_rectangle(cr, screenx+0.5, screeny+0.5,
-                        epixx-1,      pixy-1);
+                        epixx-1,     pixy-1);
   }
   cairo_stroke(cr);
 }
@@ -421,9 +418,9 @@ static void draw_tracks_in_one_view(cairo_t * cr, const std::vector<hit> & traj)
 
 // Draw all the hits in the event that we need to draw, depending on
 // whether we are animating or have been exposed, etc.
-static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
+static void draw_hits(cairo_t ** cr, const DRAWPARS * const drawpars)
 {
-  cairo_set_line_width(cr, 1.0);
+  for(int i = 0; i < kXorY; i++) cairo_set_line_width(cr[i], 1.0);
 
   std::vector<hit> & THEhits = theevents[gevi].hits;
 
@@ -442,13 +439,13 @@ static void draw_hits(cairo_t * cr, const DRAWPARS * const drawpars)
     if(bigevent && (++ndrawn)%big == 0)
       set_eventn_status2progress(ndrawn, THEhits.size());
 
-    draw_hit(cr, thishit);
+    draw_hit(cr[thishit.plane%2 == 1?kX:kY], thishit);
   }
 
   // XXX probably shouldn't be inside of draw_hits()
   for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
-    draw_tracks_in_one_view(cr, theevents[gevi].tracks[i].trajx);
-    draw_tracks_in_one_view(cr, theevents[gevi].tracks[i].trajy);
+    draw_tracks_in_one_view(cr[kX], theevents[gevi].tracks[i].trajx);
+    draw_tracks_in_one_view(cr[kY], theevents[gevi].tracks[i].trajy);
   }
 }
 
@@ -473,6 +470,9 @@ static void change_highlighted_cell(GtkWidget * widg,
        (thishit.plane ==    active_plane && thishit.cell ==    active_cell))
       draw_hit(cr, thishit);
   }
+
+  // XXX also need to redraw tracks since we may have just stomped on some
+
   cairo_destroy(cr);
 }
 
@@ -481,15 +481,14 @@ static void change_highlighted_cell(GtkWidget * widg,
 // i.e. the closest hit cell that is directly above or below the screen position,
 // even if the closest one is in another direction.  But if this position is
 // outside the detector boxes on the right or left, return -1.
-static int screen_to_activecell(const int x, const int y)
+static int screen_to_activecell(noe_view_t view, const int x, const int y)
 {
-  const bool xview = screen_y_to_xview(y);
-  const int c = screen_to_cell(x, y);
-  const int plane = screen_to_plane(x, y);
+  const int c = screen_to_cell(view, x, y);
+  const int plane = screen_to_plane(view, x);
 
   if(c < 0) return -1;
   if(c >= ncells_perplane) return -1;
-  if(plane >= first_mucatcher && !xview && c >= 2*ncells_perplane/3) return -1;
+  if(plane >= first_mucatcher && view == kY && c >= 2*ncells_perplane/3) return -1;
 
   std::vector<hit> & THEhits = theevents[gevi].hits;
   int mindist = 9999, closestcell = -1;
@@ -508,8 +507,10 @@ static int screen_to_activecell(const int x, const int y)
 
 static void request_edarea_size()
 {
-  gtk_widget_set_size_request(edarea,
-    screenxview.xmax() + 1, screenyview.ymax() + 1);
+  for(int i = 0; i < kXorY; i++)
+    gtk_widget_set_size_request(edarea[i],
+      std::max(screenview[kX].xmax(), screenview[kY].xmax()) + 1,
+      std::max(screenview[kX].ymax(), screenview[kY].ymax()) + 1);
 }
 
 // draw_event_and to_next_free_run circularly refer to each other...
@@ -527,8 +528,9 @@ static void draw_event(const DRAWPARS * const drawpars)
     request_edarea_size();
   }
 
-  cairo_t * cr = gdk_cairo_create(edarea->window);
-  cairo_push_group(cr);
+  cairo_t * cr[kXorY];
+  for(int i = 0; i < kXorY; i++)
+    cairo_push_group(cr[i] = gdk_cairo_create(edarea[i]->window));
 
   // Do not blank the display in the middle of an animation unless necessary
   if(drawpars->clear) draw_background(cr);
@@ -536,9 +538,11 @@ static void draw_event(const DRAWPARS * const drawpars)
   draw_hits(cr, drawpars);
   set_eventn_status(); // overwrite anything that draw_hits did
 
-  cairo_pop_group_to_source(cr);
-  cairo_paint(cr);
-  cairo_destroy(cr);
+  for(int i = 0; i < kXorY; i++){
+    cairo_pop_group_to_source(cr[i]);
+    cairo_paint(cr[i]);
+    cairo_destroy(cr[i]);
+  }
 }
 
 static gboolean redraw_event(__attribute__((unused)) GtkWidget *widg,
@@ -789,10 +793,9 @@ static gboolean mousebuttonpress(__attribute__((unused)) GtkWidget * widg,
   return TRUE;
 }
 
-static void dopanning(GdkEventMotion * gevent)
+static void dopanning(const noe_view_t V, GdkEventMotion * gevent)
 {
-  const bool xview = screen_y_to_xview(yonbutton1);
-  int * yoffset = xview?&screenyoffset_xview:&screenyoffset_yview;
+  int * yoffset = V == kX?&screenyoffset_xview:&screenyoffset_yview;
 
   static int oldx = xonbutton1, oldy = yonbutton1;
   if(newbuttonpush){
@@ -819,25 +822,27 @@ static void dopanning(GdkEventMotion * gevent)
 
 // Handle the mouse arriving at a spot in the drawing area. Find what cell the
 // user is pointing at, highlight it, and show information about it.
-static gboolean mouseover(__attribute__((unused)) GtkWidget * widg,
+static gboolean mouseover(GtkWidget * widg,
                           GdkEventMotion * gevent,
                           __attribute__((unused)) gpointer data)
 {
   if(gevent == NULL) return TRUE; // shouldn't happen
   if(theevents.empty()) return TRUE; // No coordinates in this case
 
+  const noe_view_t V = widg == edarea[kX]? kX: kY;
+
   if(gevent->state & GDK_BUTTON1_MASK){
-    dopanning(gevent);
+    dopanning(V, gevent);
     return TRUE;
   }
 
   const int oldactive_plane = active_plane;
   const int oldactive_cell  = active_cell;
 
-  active_plane = screen_to_plane((int)gevent->x, (int)gevent->y);
-  active_cell  = screen_to_activecell((int)gevent->x, (int)gevent->y);
+  active_plane = screen_to_plane     (V, (int)gevent->x);
+  active_cell  = screen_to_activecell(V, (int)gevent->x, (int)gevent->y);
 
-  change_highlighted_cell(edarea, oldactive_plane, oldactive_cell);
+  change_highlighted_cell(widg, oldactive_plane, oldactive_cell);
   set_eventn_status2();
 
   return TRUE;
@@ -849,10 +854,10 @@ static gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
 {
   const bool up = gevent->direction == GDK_SCROLL_UP;
 
-  const bool xview = screen_y_to_xview((int)gevent->y);
-  int * yoffset = xview?&screenyoffset_xview:&screenyoffset_yview;
-  const int plane = screen_to_plane((int)gevent->x, (int)gevent->y);
-  const int cell  = screen_to_cell ((int)gevent->x, (int)gevent->y);
+  const noe_view_t V = widg == edarea[kX]?kX:kY;
+  int * yoffset = V == kX?&screenyoffset_xview:&screenyoffset_yview;
+  const int plane = screen_to_plane(V, (int)gevent->x);
+  const int cell  = screen_to_cell (V, (int)gevent->x, (int)gevent->y);
 
   const int old_pixy = pixy;
 
@@ -1157,20 +1162,22 @@ static void setup()
   gtk_window_set_title(GTK_WINDOW(win), "NOE: New nOva Event viewer");
   g_signal_connect(win, "delete-event", G_CALLBACK(close_window), 0);
 
-  edarea = gtk_drawing_area_new();
+  for(int i = 0; i < kXorY; i++){
+    edarea[i] = gtk_drawing_area_new();
+    g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
+    g_signal_connect(edarea[i],"expose-event",G_CALLBACK(redraw_event),NULL);
+    g_signal_connect(edarea[i], "motion-notify-event", G_CALLBACK(mouseover), NULL);
+    g_signal_connect(edarea[i], "scroll-event", G_CALLBACK(dozooming), NULL);
+    g_signal_connect(edarea[i], "button-press-event",
+                     G_CALLBACK(mousebuttonpress), NULL);
+    gtk_widget_set_events(edarea[i], gtk_widget_get_events(edarea[i])
+                                     | GDK_POINTER_MOTION_HINT_MASK
+                                     | GDK_POINTER_MOTION_MASK
+                                     | GDK_BUTTON_PRESS_MASK
+                                     | GDK_SCROLL_MASK);
+  }
   setboxes();
   request_edarea_size();
-  g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
-  g_signal_connect(edarea,"expose-event",G_CALLBACK(redraw_event),NULL);
-  g_signal_connect(edarea, "motion-notify-event", G_CALLBACK(mouseover), NULL);
-  g_signal_connect(edarea, "scroll-event", G_CALLBACK(dozooming), NULL);
-  g_signal_connect(edarea, "button-press-event",
-                   G_CALLBACK(mousebuttonpress), NULL);
-  gtk_widget_set_events(edarea, gtk_widget_get_events(edarea)
-                                | GDK_POINTER_MOTION_HINT_MASK
-                                | GDK_POINTER_MOTION_MASK
-                                | GDK_BUTTON_PRESS_MASK
-                                | GDK_SCROLL_MASK);
 
   GtkWidget * next = gtk_button_new_with_mnemonic("_Next Event");
   g_signal_connect(next, "clicked", G_CALLBACK(to_next), new bool(true));
@@ -1189,9 +1196,9 @@ static void setup()
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(freerun_checkbox),
                                free_running);
 
-  g_signal_connect(animate_checkbox, "toggled", G_CALLBACK(toggle_animate),edarea);
-  g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani),edarea);
-  g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun),edarea);
+  g_signal_connect(animate_checkbox, "toggled", G_CALLBACK(toggle_animate),NULL);
+  g_signal_connect(cum_ani_checkbox, "toggled", G_CALLBACK(toggle_cum_ani),NULL);
+  g_signal_connect(freerun_checkbox, "toggled", G_CALLBACK(toggle_freerun),NULL);
 
   GtkWidget * re_an_button = gtk_button_new_with_mnemonic("_Restart animation");
   g_signal_connect(re_an_button, "clicked", G_CALLBACK(restart_animation), NULL);
@@ -1207,7 +1214,7 @@ static void setup()
   ueventbut = gtk_button_new_with_mnemonic("_Go to event");
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
-  const int nrow = 3+NSTATBOXES, ncol = 11;
+  const int nrow = 4+NSTATBOXES, ncol = 11;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
@@ -1242,10 +1249,12 @@ static void setup()
     gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i);
   }
 
-  gtk_table_attach_defaults(GTK_TABLE(tab), edarea, 0, ncol, 2+NSTATBOXES, nrow);
+  for(int i = 0; i < kXorY; i++)
+    gtk_table_attach_defaults(GTK_TABLE(tab), edarea[i], 0, ncol,
+                              2+NSTATBOXES+i, 3+NSTATBOXES+i);
 
   // This isn't the size I want, but along with requesting the size of the
-  // edarea widget, it has the desired effect, at least more or less.
+  // edarea widgets, it has the desired effect, at least more or less.
   gtk_window_set_default_size(GTK_WINDOW(win), 400, 300);
 
   gtk_widget_show_all(win);
