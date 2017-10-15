@@ -8,7 +8,7 @@ static const int FDnplanes_perview = 16 * 28,
                  FDncells_perplane = 12 * 32;
 
 int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
-int NDpixy = 3, NDpixx = pixx_from_pixy(NDpixy);
+int NDpixy = 4, NDpixx = pixx_from_pixy(NDpixy);
 
 int viewsep = 8; // vertical cell widths between x and y views
 
@@ -85,46 +85,6 @@ static int get_yviewymin(const int pixels_y)
   return get_ybox(pixels_y) + viewsep - pixels_y/2 /* cell stagger */;
 }
 
-// Calculate the size of the bounding boxes for the detector's x and y
-// views, plus the muon catcher cutaway.  Resize the window to match.
-void setboxes()
-{
-  // TODO why not use the det_to_screen_x/y functions to get these?  Then the
-  // boxes could zoom naturally.  Well, at the moment that would be circular
-  // for y because we set both ymins here.  This could be pulled out.
-
-  const int ybox = get_ybox(pixy);
-
-  const int xbox = get_xbox(pixx);
-
-  const int xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */;
-
-  // muon catcher is 1/3 empty.  Do not include cell stagger here since we want
-  // the extra half cells to be inside the active box.
-  const int yboxnomu = (ncells_perplane/3)*pixy;
-
-  screenxview.xmin = pixx/2 /* plane stagger */;
-  screenxview.ymin = get_xviewymin(pixy);
-  screenxview.xsize = xbox;
-  screenxview.ysize = ybox;
-
-  const bool hasmucatch = first_mucatcher < nplanes;
-
-  // In the x view the blank spaces are to the left of the hits, but in
-  // the y view, they are to the right, but I don't want the box to include them.
-  const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
-
-  screenyview.xmin = 0;
-  screenyview.ymin = get_yviewymin(pixy);
-  screenyview.xsize = xbox-hacky_subtraction_for_y_mucatch;
-  screenyview.ysize = ybox;
-
-  screenmu.xmin = 1 + xboxnomu;
-  screenmu.ymin = ybox + viewsep - pixy/2;
-  screenmu.xsize = xbox-xboxnomu-hacky_subtraction_for_y_mucatch;
-  screenmu.ysize = yboxnomu;
-}
-
 void setfd()
 {
   isfd = true;
@@ -184,6 +144,45 @@ int det_to_screen_y(const int plane, const int cell)
          + celldown*pixy/2
 
          - (xview?screenyoffset_xview:screenyoffset_yview);
+}
+
+// Calculate the size of the bounding boxes for the detector's x and y
+// views, plus the muon catcher cutaway.  Resize the window to match.
+void setboxes()
+{
+  // TODO: If we used the det_to_screen_x/y functions to get these, the boxes
+  // could zoom naturally.  But since I've conflated these graphical boxes with
+  // the boundaries bewteen the views, that will require some untangling.
+
+  const int ybox = get_ybox(pixy);
+  const int xbox = get_xbox(pixx);
+
+  const int xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */;
+
+  // muon catcher is 1/3 empty.  Do not include cell stagger here since we want
+  // the extra half cells to be inside the active box.
+  const int yboxnomu = (ncells_perplane/3)*pixy;
+
+  screenxview.xmin = pixx/2 /* plane stagger */;
+  screenxview.ymin = get_xviewymin(pixy);
+  screenxview.xsize = xbox;
+  screenxview.ysize = ybox;
+
+  const bool hasmucatch = first_mucatcher < nplanes;
+
+  // In the x view the blank spaces are to the left of the hits, but in
+  // the y view, they are to the right, but I don't want the box to include them.
+  const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
+
+  screenyview.xmin = 0;
+  screenyview.ymin = get_yviewymin(pixy);
+  screenyview.xsize = xbox-hacky_subtraction_for_y_mucatch;
+  screenyview.ysize = ybox;
+
+  screenmu.xmin = 1 + xboxnomu;
+  screenmu.ymin = ybox + viewsep - pixy/2;
+  screenmu.xsize = xbox-xboxnomu-hacky_subtraction_for_y_mucatch;
+  screenmu.ysize = yboxnomu;
 }
 
 bool screen_y_to_xview(const int y)

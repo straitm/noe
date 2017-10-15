@@ -4,8 +4,17 @@ struct hit{
   bool good_tns;
 };
 
+struct track{
+  float startx, starty, startz;
+  float stopx, stopy, stopz;
+  std::vector<hit> hits;
+  std::vector<hit> trajx; // maybe want better precision than hit level?
+  std::vector<hit> trajy;
+};
+
 struct noeevent{
   std::vector<hit> hits;
+  std::vector<track> tracks;
   uint32_t nevent, nrun, nsubrun;
 
   // The first and last hits physically in the event
@@ -33,6 +42,11 @@ struct noeevent{
   int32_t current_mintick = 0x7fffffff, current_maxtick = 0;
 
   bool fdlike = false;
+
+  void addtrack(__attribute__((unused)) const track & t)
+  {
+    tracks.push_back(t);
+  }
 
   void addhit(const hit & h)
   {

@@ -6,6 +6,9 @@
 #include "art/Framework/Core/ModuleMacros.h"
 
 #include "RecoBase/CellHit.h"
+
+// For tracks
+#include "Geometry/Geometry.h"
 #include "RecoBase/Track.h"
 
 #include "func/main.h"
@@ -20,9 +23,16 @@ class noe : public art::EDProducer {
   ~noe();
   void produce(art::Event& evt);
   void endJob();
+
+  // The art label for tracks that we are going to display, or the
+  // empty string to display no tracks.
+  std::string fTrackLabel;
 };
 
-noe::noe(fhicl::ParameterSet const & pset) { }
+noe::noe(fhicl::ParameterSet const & pset)
+{
+  fTrackLabel = pset.get< std::string >("track_label");
+}
 
 noe::~noe() { }
 
@@ -78,11 +88,25 @@ void noe::produce(art::Event& evt)
 {
   signal(SIGINT, SIG_DFL); // just exit on Ctrl-C
 
+  // Not needed for hits, just for tracks.  Aggressively don't load the
+  // Geometry if it isn't needed.
+  art::ServiceHandle<geo::Geometry> * geo =
+    fTrackLabel == ""? NULL: new art::ServiceHandle<geo::Geometry>;
+
   art::Handle< std::vector<rb::CellHit> > cellhits;
 
   if(!evt.getByLabel("calhit", cellhits)){
     fprintf(stderr, "NOE needs a file with calhits in it.\n");
     _exit(0);
+  }
+
+  art::Handle< std::vector<rb::Track> > tracks;
+  if(fTrackLabel != ""){
+    try{evt.getByLabel(fTrackLabel, tracks); }
+    catch(...){
+      fprintf(stderr,
+        "Warning: No tracks found with label \"%s\"\n", fTrackLabel.c_str());
+    }
   }
 
 #if 0
@@ -110,6 +134,42 @@ void noe::produce(art::Event& evt)
     thehit.good_tns = c.GoodTiming();
     ev.addhit(thehit);
   }
+  if(tracks.isValid()){
+    for(unsigned int i = 0; i < tracks->size(); i++){
+      track thetrack;
+      thetrack.startx = (*tracks)[i].Start().X();
+      thetrack.starty = (*tracks)[i].Start().Y();
+      thetrack.startz = (*tracks)[i].Start().Z();
+      thetrack.stopx = (*tracks)[i].Stop().X();
+      thetrack.stopy = (*tracks)[i].Stop().Y();
+      thetrack.stopz = (*tracks)[i].Stop().Z();
+      for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
+        hit thehit;
+        thehit.cell = (*tracks)[i].Cell(c)->Cell();
+        thehit.plane = (*tracks)[i].Cell(c)->Plane();
+        thetrack.hits.push_back(thehit);
+      }
+      for(unsigned int p = 0; p < (*tracks)[i].NTrajectoryPoints(); p++){
+        const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
+        int plane, cell;
+        try{
+          (*geo)->getPlaneAndCellID(tp.X(), tp.Y(), tp.Z(), plane, cell);
+          hit thehit;
+          thehit.cell = cell;
+          thehit.plane = plane;
+          if(plane%2 == 1) thetrack.trajx.push_back(thehit);
+          else             thetrack.trajy.push_back(thehit);
+        }
+        catch(cet::exception e){
+          // If the unique cell id doesn't decode to a cell and plane, just
+          // ignore the point.
+          ;
+        }
+      }
+      ev.addtrack(thetrack);
+    }
+  }
+
   theevents.push_back(ev);
 
   realmain(false);
