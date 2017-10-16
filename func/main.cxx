@@ -859,7 +859,6 @@ static gboolean dozooming(GtkWidget * widg,
   const int plane = screen_to_plane(V, (int)gevent->x);
   const int cell  = screen_to_cell (V, (int)gevent->x, (int)gevent->y);
 
-  printf("%d %d -> %d %d\n", (int)gevent->x, (int)gevent->y, plane, cell);
   const int old_pixy = pixy;
 
   if(up) pixy++;

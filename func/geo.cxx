@@ -174,7 +174,7 @@ int screen_to_plane(const noe_view_t view, const int x)
 
   // The number of the first muon catcher plane counting only planes
   // in one view.
-  const int halfmucatch = (first_mucatcher)/2 + view == kY;
+  const int halfmucatch = (first_mucatcher)/2 + (view == kY);
 
   // Account for the plane stagger and border width.
   const int effx = unoffsetx - 2 -
