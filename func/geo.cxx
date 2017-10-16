@@ -102,7 +102,7 @@ int det_to_screen_x(const int plane)
          // space out the muon catcher planes so they are twice as far
          // apart as normal.  This is very close to right, since the depth
          // of (two scintillator planes + one steel plane + air gaps) is
-         // within 10% of the depth of two sintillator planes.
+         // within 10% of the depth of two scintillator planes.
          +(plane > first_mucatcher?plane-first_mucatcher:0))/2)
 
         // stagger x and y planes
@@ -134,7 +134,7 @@ void setboxes()
 {
   // TODO: If we used the det_to_screen_x/y functions to get these, the boxes
   // could zoom naturally.  But since I've conflated these graphical boxes with
-  // the boundaries bewteen the views, that will require some untangling.
+  // the boundaries between the views, that will require some untangling.
 
   const int ybox = get_ybox(pixy);
   const int xbox = get_xbox(pixx);
