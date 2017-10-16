@@ -195,9 +195,8 @@ int screen_to_plane(const noe_view_t view, const int x)
   const int halfmucatch = (first_mucatcher)/2 + view == kY;
 
   // Account for the plane stagger and border width.
-  int effx;
-  if(unoffsetx-2 >= halfmucatch*pixx) effx = unoffsetx - 2 - pixx/2;
-  else effx = unoffsetx - 2;
+  const int effx = unoffsetx - 2 -
+    (unoffsetx-2 >= halfmucatch*pixx)*(pixx/2);
 
   // Half the plane number, as long as we're not in the muon catcher
   int halfp = view == kX? (effx-pixx/2)/pixx
