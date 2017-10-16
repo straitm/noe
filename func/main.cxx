@@ -235,21 +235,15 @@ static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
 {
   if(hit1.plane%2 ^ hit2.plane%2) return;
 
-  noe_view_t V = hit1.plane%2 == 1?kX:kY;
-
   const int screenx1 = det_to_screen_x(hit1.plane);
   const int screenx2 = det_to_screen_x(hit2.plane);
-  if(screenx1      < screenview[V].xmin) return;
-  if(screenx1+pixx > screenview[V].xmax()) return;
-  if(screenx2      < screenview[V].xmin) return;
-  if(screenx2+pixx > screenview[V].xmax()) return;
 
   const int screeny1 = det_to_screen_y(hit1.plane, hit1.cell);
   const int screeny2 = det_to_screen_y(hit2.plane, hit2.cell);
-  if(screeny1      < screenview[V].ymin) return;
-  if(screeny1+pixy > screenview[V].ymax()) return;
-  if(screeny2      < screenview[V].ymin) return;
-  if(screeny2+pixy > screenview[V].ymax()) return;
+
+  /* Do not try to optimize by not drawing track segments that are entirely out
+     of the view, because I don't want to do the work, and I suspect the
+     performance advantage is small in most cases (but haven't checked). */
 
   cairo_set_source_rgb(cr, 0, 1, 1);
 
@@ -264,15 +258,15 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
 {
   const noe_view_t V = thishit.plane%2 == 1?kX:kY;
 
-  // Get position.  If the zoom carries this hit out of the view in screen y,
-  // don't display it.
+  // Get position of upper left corner.  If the zoom carries this hit entirely
+  // out of the view in screen y, don't waste cycles displaying it.
   const int screenx = det_to_screen_x(thishit.plane);
-  if(screenx      < screenview[V].xmin) return;
-  if(screenx+pixx > screenview[V].xmax()) return;
+  if(screenx+pixx < 0) return;
+  if(screenx      > edarea[V]->allocation.width) return;
 
   const int screeny = det_to_screen_y(thishit.plane, thishit.cell);
-  if(screeny      < screenview[V].ymin) return;
-  if(screeny+pixy > screenview[V].ymax()) return;
+  if(screeny+pixy < 0) return;
+  if(screeny      > edarea[V]->allocation.height) return;
 
   float red, green, blue;
 
