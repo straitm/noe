@@ -500,6 +500,9 @@ static int screen_to_activecell(noe_view_t view, const int x, const int y)
   return closestcell;
 }
 
+// Size the drawing areas to the detector sizes at the starting zoom level.
+// This would not make sense if called after the user zooms and pans, so it
+// is only called on startup.
 static void request_edarea_size()
 {
   for(int i = 0; i < kXorY; i++)
@@ -804,8 +807,8 @@ static void dopanning(const noe_view_t V, GdkEventMotion * gevent)
   if(screenxoffset < 0) screenxoffset = 0;
   if(*yoffset      < 0) *yoffset      = 0;
 
-  const int maxxpan = get_xbox(pixx) - get_xbox(unzoomedpixx());
-  const int maxypan = get_ybox(pixy) - get_ybox(unzoomedpixy());
+  const int maxxpan = total_x_pixels(pixx) - total_x_pixels(unzoomedpixx());
+  const int maxypan = total_y_pixels(pixy) - total_y_pixels(unzoomedpixy());
 
   if(screenxoffset >= maxxpan) screenxoffset = maxxpan;
   if(*yoffset      >= maxypan) *yoffset      = maxypan;

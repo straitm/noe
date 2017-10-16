@@ -60,14 +60,14 @@ int scintpix_from_pixx(const int x)
   return int(x * scintdepth/(2*celldepth) + 0.5);
 }
 
-int get_xbox(const int pixels_x)
+int total_x_pixels(const int pixels_x)
 {
   return pixels_x*(nplanes_perview +
          (first_mucatcher < nplanes?
          nplanes_perview - first_mucatcher/2: 0)) + 1;
 }
 
-int get_ybox(const int pixels_y)
+int total_y_pixels(const int pixels_y)
 {
   return ncells_perplane*pixels_y
          + pixels_y/2 /* cell stagger */ + 1 /* border */;
@@ -132,8 +132,8 @@ int det_to_screen_y(const int plane, const int cell)
 // views, plus the muon catcher cutaway.
 void setboxes()
 {
-  const int ybox = get_ybox(pixy);
-  const int xbox = get_xbox(pixx);
+  const int ybox = total_y_pixels(pixy);
+  const int xbox = total_x_pixels(pixx);
 
   const int xboxnomu = pixx*(first_mucatcher/2) + pixy/2 /* cell stagger */;
 
