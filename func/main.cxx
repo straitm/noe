@@ -204,7 +204,7 @@ __attribute__((unused)) static bool by_time(const hit & a, const hit & b)
 // Blank the drawing area and draw the detector bounding boxes
 static void draw_background(cairo_t ** cr)
 {
-  for(int i = 0; i < 2; i++){
+  for(int i = 0; i < kXorY; i++){
     cairo_set_source_rgb(cr[i], 0, 0, 0);
     cairo_paint(cr[i]);
 
@@ -848,7 +848,7 @@ static gboolean mouseover(GtkWidget * widg,
   return TRUE;
 }
 
-static gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
+static gboolean dozooming(GtkWidget * widg,
                           GdkEventScroll * gevent,
                           __attribute__((unused)) gpointer data)
 {
@@ -859,6 +859,7 @@ static gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
   const int plane = screen_to_plane(V, (int)gevent->x);
   const int cell  = screen_to_cell (V, (int)gevent->x, (int)gevent->y);
 
+  printf("%d %d -> %d %d\n", (int)gevent->x, (int)gevent->y, plane, cell);
   const int old_pixy = pixy;
 
   if(up) pixy++;
@@ -1162,9 +1163,9 @@ static void setup()
   gtk_window_set_title(GTK_WINDOW(win), "NOE: New nOva Event viewer");
   g_signal_connect(win, "delete-event", G_CALLBACK(close_window), 0);
 
+  g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
   for(int i = 0; i < kXorY; i++){
     edarea[i] = gtk_drawing_area_new();
-    g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
     g_signal_connect(edarea[i],"expose-event",G_CALLBACK(redraw_event),NULL);
     g_signal_connect(edarea[i], "motion-notify-event", G_CALLBACK(mouseover), NULL);
     g_signal_connect(edarea[i], "scroll-event", G_CALLBACK(dozooming), NULL);

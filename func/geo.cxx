@@ -10,8 +10,6 @@ static const int FDnplanes_perview = 16 * 28,
 int FDpixy = 1, FDpixx = pixx_from_pixy(FDpixy);
 int NDpixy = 4, NDpixx = pixx_from_pixy(NDpixy);
 
-int viewsep = 8; // vertical cell widths between x and y views
-
 // We're going to assume the ND until we see a hit that indicates it's FD
 bool isfd = false;
 
@@ -75,16 +73,6 @@ int get_ybox(const int pixels_y)
          + pixels_y/2 /* cell stagger */ + 1 /* border */;
 }
 
-static int get_xviewymin(__attribute__((unused)) const int pixels_y)
-{
-  return 0; // :-)
-}
-
-static int get_yviewymin(const int pixels_y)
-{
-  return get_ybox(pixels_y) + viewsep - pixels_y/2 /* cell stagger */;
-}
-
 void setfd()
 {
   isfd = true;
@@ -130,13 +118,7 @@ int det_to_screen_y(const int plane, const int cell)
   // In each view, every other plane is offset by half a cell width
   const bool celldown = !((plane/2)%2 ^ (plane%2));
 
-         // Offset to the view, using the unzoomed size, since this sets
-         // the size of the view on the screen.
-  return (xview?get_xviewymin(isfd?FDpixy:NDpixy):
-                get_yviewymin(isfd?FDpixy:NDpixy))
-
-         // cells numbered from the bottom
-         + pixy*(ncells_perplane-cell)
+  return + pixy*(ncells_perplane-cell) // cells numbered from the bottom
 
          - (pixy-1)
 
@@ -147,7 +129,7 @@ int det_to_screen_y(const int plane, const int cell)
 }
 
 // Calculate the size of the bounding boxes for the detector's x and y
-// views, plus the muon catcher cutaway.  Resize the window to match.
+// views, plus the muon catcher cutaway.
 void setboxes()
 {
   // TODO: If we used the det_to_screen_x/y functions to get these, the boxes
@@ -164,7 +146,7 @@ void setboxes()
   const int yboxnomu = (ncells_perplane/3)*pixy;
 
   screenview[kX].xmin = pixx/2 /* plane stagger */;
-  screenview[kX].ymin = get_xviewymin(pixy);
+  screenview[kX].ymin = 0;
   screenview[kX].xsize = xbox;
   screenview[kX].ysize = ybox;
 
@@ -175,12 +157,12 @@ void setboxes()
   const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
 
   screenview[kY].xmin = 0;
-  screenview[kY].ymin = get_yviewymin(pixy);
+  screenview[kY].ymin = 0;
   screenview[kY].xsize = xbox-hacky_subtraction_for_y_mucatch;
   screenview[kY].ysize = ybox;
 
   screenmu.xmin = 1 + xboxnomu;
-  screenmu.ymin = ybox + viewsep - pixy/2;
+  screenmu.ymin = - pixy/2; // XXX Is this right?
   screenmu.xsize = xbox-xboxnomu-hacky_subtraction_for_y_mucatch;
   screenmu.ysize = yboxnomu;
 }
@@ -207,7 +189,7 @@ int screen_to_plane(const noe_view_t view, const int x)
                                   (halfp - halfmucatch)/2;
 
   // The plane number, except it might be out of range
-  const int p = halfp*2 + view == kX;
+  const int p = halfp*2 + (view == kX);
 
   if(p < (view == kX)) return -1; // XXX too clever
   if(p >= nplanes) return -1;
