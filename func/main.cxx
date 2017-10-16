@@ -846,6 +846,7 @@ static gboolean mouseover(GtkWidget * widg,
   return TRUE;
 }
 
+// XXX does the wrong thing if the cursor is in the muon catcher cutout
 static gboolean dozooming(GtkWidget * widg,
                           GdkEventScroll * gevent,
                           __attribute__((unused)) gpointer data)
