@@ -204,6 +204,7 @@ __attribute__((unused)) static bool by_time(const hit & a, const hit & b)
 // Blank the drawing area and draw the detector bounding boxes
 static void draw_background(cairo_t ** cr)
 {
+  setboxes();
   for(int i = 0; i < kXorY; i++){
     cairo_set_source_rgb(cr[i], 0, 0, 0);
     cairo_paint(cr[i]);
@@ -1208,7 +1209,7 @@ static void setup()
   ueventbut = gtk_button_new_with_mnemonic("_Go to event");
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
-  const int nrow = 4+NSTATBOXES, ncol = 11;
+  const int nrow = 5+NSTATBOXES, ncol = 11;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(win), tab);
 
@@ -1245,7 +1246,10 @@ static void setup()
 
   for(int i = 0; i < kXorY; i++)
     gtk_table_attach_defaults(GTK_TABLE(tab), edarea[i], 0, ncol,
-                              2+NSTATBOXES+i, 3+NSTATBOXES+i);
+                              2+NSTATBOXES+i*2, 3+NSTATBOXES+i*2); // too clever
+
+  gtk_table_attach_defaults(GTK_TABLE(tab), gtk_hseparator_new(), 0, ncol,
+                            3+NSTATBOXES, 4+NSTATBOXES);
 
   // This isn't the size I want, but along with requesting the size of the
   // edarea widgets, it has the desired effect, at least more or less.

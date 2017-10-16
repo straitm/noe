@@ -132,10 +132,6 @@ int det_to_screen_y(const int plane, const int cell)
 // views, plus the muon catcher cutaway.
 void setboxes()
 {
-  // TODO: If we used the det_to_screen_x/y functions to get these, the boxes
-  // could zoom naturally.  But since I've conflated these graphical boxes with
-  // the boundaries between the views, that will require some untangling.
-
   const int ybox = get_ybox(pixy);
   const int xbox = get_xbox(pixx);
 
@@ -145,8 +141,8 @@ void setboxes()
   // the extra half cells to be inside the active box.
   const int yboxnomu = (ncells_perplane/3)*pixy;
 
-  screenview[kX].xmin = pixx/2 /* plane stagger */;
-  screenview[kX].ymin = 0;
+  screenview[kX].xmin = -screenxoffset + pixx/2 /* plane stagger */;
+  screenview[kX].ymin = -screenyoffset_xview;
   screenview[kX].xsize = xbox;
   screenview[kX].ysize = ybox;
 
@@ -156,14 +152,14 @@ void setboxes()
   // the y view, they are to the right, but I don't want the box to include them.
   const int hacky_subtraction_for_y_mucatch = hasmucatch * pixx;
 
-  screenview[kY].xmin = 0;
-  screenview[kY].ymin = 0;
+  screenview[kY].xmin = -screenxoffset;
+  screenview[kY].ymin = -screenyoffset_yview;
   screenview[kY].xsize = xbox-hacky_subtraction_for_y_mucatch;
   screenview[kY].ysize = ybox;
 
-  screenmu.xmin = 1 + xboxnomu;
-  screenmu.ymin = - pixy/2; // XXX Is this right?
-  screenmu.xsize = xbox-xboxnomu-hacky_subtraction_for_y_mucatch;
+  screenmu.xmin = -screenxoffset + 1 + xboxnomu;
+  screenmu.ymin = -screenyoffset_yview;
+  screenmu.xsize = xbox-xboxnomu-hacky_subtraction_for_y_mucatch-1;
   screenmu.ysize = yboxnomu;
 }
 
@@ -203,9 +199,7 @@ int screen_to_cell(const noe_view_t view, const int x, const int y)
 
   const int plane = screen_to_plane(view, x);
   const bool celldown = !((plane/2)%2 ^ (plane%2));
-  const int effy = (view == kX? unoffsety
-                              : unoffsety - screenview[kY].ymin)
-                   - celldown*(pixy/2) - 2;
+  const int effy = unoffsety - celldown*(pixy/2) - 2;
 
   const int c = ncells_perplane - effy/pixy - 1;
   if(c < 0) return -1;
