@@ -57,7 +57,7 @@ gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
 {
   const bool up = gevent->direction == GDK_SCROLL_UP;
 
-  const noe_view_t V = (bool *)data?kY:kX;
+  const noe_view_t V = (*(bool *)data)?kY:kX;
   int * yoffset = V == kX?&screenyoffset_xview:&screenyoffset_yview;
   const int plane = screen_to_plane_unbounded(V, (int)gevent->x);
   const int cell  = screen_to_cell_unbounded (V, (int)gevent->x, (int)gevent->y);

@@ -14,7 +14,9 @@
 #include "func/main.h"
 #include "func/event.h"
 
-std::vector<noeevent> theevents;
+using std::vector;
+
+vector<noeevent> theevents;
 
 namespace noe {
 class noe : public art::EDProducer {
@@ -84,122 +86,138 @@ __attribute__((unused)) static void add_test_nd_event()
   theevents.push_back(ev);
 }
 
-// Called by get_int_plane_and_cell() and calls itself recursively until
-// it gets an answer.
-//
-// This is awfully slow, taking like 0.6s per event for FD cosmics
-static trackpoint get_int_plane_and_cell_r(const int rdepth,
-  art::ServiceHandle<geo::Geometry> & geo,
-  const double  x, const double  y, const double  z,
-  const geo::View_t view,
-  const double dx, const double dy, const double dz)
+static vector< vector<float> > xcell_z;
+static vector< vector<float> > ycell_z;
+static vector<float> xplane_z;
+static vector<float> yplane_z;
+static vector< vector<float> > xcell_x;
+static vector< vector<float> > ycell_y;
+
+// Given a position in 3-space, return a plane and cell that is reasonably
+// close in the given view assuming a regular detector geometry.
+static trackpoint get_int_plane_and_cell(
+  const double x, const double y, const double z, const geo::View_t view)
 {
   trackpoint ans;
-  const double X = x+dx, Y = y+dy, Z = z+dz;
-  bool ok = true;
-  try{
-    geo->getPlaneAndCellID(X, Y, Z, ans.plane, ans.cell);
-  }
-  catch(cet::exception e){
-    ok = false;
-  }
 
-  if(ok){
-    if(view == geo::kXorY ||
-      (ans.plane%2 == 1 && view == geo::kX) ||
-      (ans.plane%2 == 0 && view == geo::kY)){
+  // (1) First the plane
+  {
+    vector<float> & tplane_z = view == geo::kX?xplane_z:yplane_z;
 
-      return ans;
+    const vector<float>::iterator pi
+      = std::upper_bound(tplane_z.begin(), tplane_z.end(), z);
+
+    const int add = (view == geo::kX);
+
+    if(pi == tplane_z.end()){
+      // No plane had as big a 'z' as this, so use the last plane.
+      ans.plane = (tplane_z.size()-1) * 2 + add;
+    }
+    else if(pi == tplane_z.begin()){
+      // 'z' was smaller than the first plane, so that's the closest.
+      ans.plane = add;
+    }
+    else{
+      // Check which is closer, the first plane bigger than 'z', or the
+      // previous one.
+      const float thisone  = fabs( *pi - z);
+      const float previous = fabs( *(pi - 1) - z);
+      if(thisone < previous)
+        ans.plane = (pi - tplane_z.begin())*2 + add;
+      else
+        ans.plane = (pi - tplane_z.begin())*2 + add - 2;
     }
   }
 
-  if(rdepth > 7*20){
-    fprintf(stderr, "Couldn't find the cell/plane for (%.1f, %.1f, %.1f)\n", x, y, z);
-    ans.plane = ans.cell = 0;
-    return ans;
+  // (2) Now find the cell
+  {
+    vector<float> & cells
+      = (view == geo::kX? xcell_x:ycell_y)[ans.plane/2];
+
+    const float t = (view == geo::kX? x: y);
+    const vector<float>::iterator ci
+      = std::upper_bound(cells.begin(), cells.end(), t);
+
+    if(ci == cells.end()){
+      // No cell had as big a 't' as this, so use the last cell.
+      ans.cell = cells.size()-1;
+    }
+    else if(ci == cells.begin()){
+      // 't' was smaller than the first cell, so that's the closest.
+      ans.cell = 0;
+    }
+    else{
+      // Check which is closer
+      const float thisone  = fabs( *ci - t);
+      const float previous = fabs( *(ci - 1) - t);
+      if(thisone < previous) ans.cell = (ci - cells.begin());
+      else                   ans.cell = (ci - cells.begin()) - 1;
+    }
   }
 
-  // search progressively farther inward
-  bool gox, goy, goz;
-  switch(rdepth%7){
-    case 0: gox = fabs(x)>fabs(y); goy = !gox; goz = false; break;
-    case 1: gox = fabs(y)>fabs(x); goy = !gox; goz = false; break;
-    case 2: gox = false; goy = false; goz = true ; break;
-    case 3: gox = false; goy = true ; goz = true ; break;
-    case 4: gox = true ; goy = false; goz = true ; break;
-    case 5: gox = true ; goy = true ; goz = false; break;
-    default:gox = true ; goy = true ; goz = true ; break;
-  }
-  const double step = 3.0*pow(1.25, rdepth/7 + 1);
-  return get_int_plane_and_cell_r(rdepth+1, geo, x, y, z, view,
-    -x/fabs(x)        *gox*step,
-    -y/fabs(y)        *goy*step,
-    (z < 600.0? 1: -1)*goz*step);
+  return ans;
 }
 
-// Given a position in 3-space, return a plane and cell that (preferably)
-// that position is inside of or (quite often) is somewhere near. If
-// view is kXorY, returns whichever view it finds.  Otherwise, requires
-// that it's the named view.
-static trackpoint get_int_plane_and_cell(
-  art::ServiceHandle<geo::Geometry> & geo,
-  const double x, const double y, const double z, const geo::View_t view)
+static void build_cell_lookup_table(art::ServiceHandle<geo::Geometry> & geo)
 {
-  return get_int_plane_and_cell_r(0, geo, x, y, z, view, 0, 0, 0);
+  for(unsigned int pl = 0; pl < geo->NPlanes(); pl++){
+    const geo::PlaneGeo * const plane = geo->Plane(pl);
+    geo::View_t view;
+    vector<float> cell_z, cell_t;
+    for(unsigned int ce = 0; ce < plane->Ncells(); ce++){
+      double cellcenter[3], dum[3];
+      geo->CellInfo(pl, ce, &view, cellcenter, dum);
+      cell_z.push_back(cellcenter[2]);
+      cell_t.push_back(geo::kX?cellcenter[0]:cellcenter[1]);
+    }
+
+    (view == geo::kX?xcell_z:ycell_z).push_back(cell_z);
+    (view == geo::kX?xcell_x:ycell_y).push_back(cell_t);
+
+    vector<float> & pz = (view == geo::kX?xplane_z:yplane_z);
+    pz.push_back(cell_z[cell_z.size()/2]);
+  }
 }
 
 // Given a Cartesian position, tp, representing a track point, return the
 // position in floating-point plane and cell number for both views where an
 // integer means the cell center.
-//
-// XXX I don't think it gives the right fractions for the muon catcher
 static std::pair<trackpoint, trackpoint> cart_to_cp(
   art::ServiceHandle<geo::Geometry> & geo, const TVector3 &tp)
 {
-  // fragile
+  {
+    static int first = true;
+    if(first) build_cell_lookup_table(geo);
+    first = false;
+  }
+
+  // For each view, first find a plane and cell which is probably the closest
+  // one, or maybe one of the several closest. Then ask the geometry where that
+  // cell is and store the difference in the fractional part of the trackpoint.
+  // This is right up to the difference between the mean plane and cell
+  // spacings and the actual spacing near the requested point.  For purposes of
+  // the event display, it's fine.
+
+  // Exact values are not very important
   const double meanplanesep = 6.6681604;
-  const double meancellsep = 3.9674375;
-
-  // First find the position for the view that the point is really in.
-  trackpoint tp_nativeview = get_int_plane_and_cell(geo, tp.X(), tp.Y(), tp.Z(),
-    geo::kXorY);
-  double cellcenter[3], cellhalfsize[3] /* includes PVC but not glue or air? */;
-
-  geo::View_t nativeview;
-  geo->CellInfo(tp_nativeview.plane, tp_nativeview.cell,
-                &nativeview, cellcenter, cellhalfsize);
-  tp_nativeview.fcell =
-    nativeview == geo::kX? (tp.X() - cellcenter[0])/meancellsep
-                         : (tp.Y() - cellcenter[1])/meancellsep;
-
-  tp_nativeview.fplane = (tp.Z() - cellcenter[2])/meanplanesep;
-
-  // Now shift down one plane and find the cell and plane
-  trackpoint tp_otherview = get_int_plane_and_cell(geo, tp.X(), tp.Y(),
-    tp.Z() + meanplanesep, nativeview == geo::kX?geo::kY:geo::kX);
-
-  geo::View_t otherview;
-  geo->CellInfo(tp_otherview.plane, tp_otherview.cell,
-                &otherview, cellcenter, cellhalfsize);
-  tp_otherview.fcell =
-    otherview == geo::kX? (tp.X() - cellcenter[0])/meancellsep
-                        : (tp.Y() - cellcenter[1])/meancellsep;
-
-  tp_otherview.fplane = (tp.Z() - cellcenter[2])/meanplanesep;
-
-  // Should not happen (should!)
-  if(nativeview == otherview)
-    fprintf(stderr, "Oh no, got the same view twice!\n");
+  const double meancellsep  = 3.9674375;
 
   std::pair<trackpoint, trackpoint> answer;
-  if(nativeview == geo::kX){
-    answer.first  = tp_nativeview;
-    answer.second = tp_otherview;
-  }
-  else{
-    answer.first  = tp_otherview;
-    answer.second = tp_nativeview;
-  }
+  answer.first = get_int_plane_and_cell(tp.X(), tp.Y(), tp.Z(), geo::kX);
+
+  double cellcenter[3], dum[3];
+  geo::View_t dumv;
+
+  geo->CellInfo(answer.first.plane, answer.first.cell, &dumv, cellcenter, dum);
+  answer.first.fcell  = (tp.X() - cellcenter[0])/meancellsep;
+  answer.first.fplane = (tp.Z() - cellcenter[2])/meanplanesep;
+
+  answer.second = get_int_plane_and_cell(tp.X(), tp.Y(), tp.Z(), geo::kY);
+
+  geo->CellInfo(answer.second.plane, answer.second.cell, &dumv, cellcenter, dum);
+  answer.second.fcell =  (tp.Y() - cellcenter[1])/meancellsep;
+  answer.second.fplane = (tp.Z() - cellcenter[2])/meanplanesep;
+
   return answer;
 }
 
@@ -213,14 +231,14 @@ void noe::produce(art::Event& evt)
   art::ServiceHandle<geo::Geometry> * geo =
     fTrackLabel == ""? NULL: new art::ServiceHandle<geo::Geometry>;
 
-  art::Handle< std::vector<rb::CellHit> > cellhits;
+  art::Handle< vector<rb::CellHit> > cellhits;
 
   if(!evt.getByLabel("calhit", cellhits)){
     fprintf(stderr, "NOE needs a file with calhits in it.\n");
     _exit(0);
   }
 
-  art::Handle< std::vector<rb::Track> > tracks;
+  art::Handle< vector<rb::Track> > tracks;
   if(fTrackLabel != ""){
     try{evt.getByLabel(fTrackLabel, tracks); }
     catch(...){
