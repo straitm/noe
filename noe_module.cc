@@ -122,17 +122,14 @@ static trackpoint get_int_plane_and_cell(
       // previous one.
       const float thisone  = fabs( *pi - z);
       const float previous = fabs( *(pi - 1) - z);
-      if(thisone < previous)
-        ans.plane = (pi - tplane_z.begin())*2 + add;
-      else
-        ans.plane = (pi - tplane_z.begin())*2 + add - 2;
+      if(thisone < previous) ans.plane = (pi - tplane_z.begin())*2 + add;
+      else                   ans.plane = (pi - tplane_z.begin())*2 + add - 2;
     }
   }
 
   // (2) Now find the cell
   {
-    vector<float> & cells
-      = (view == geo::kX? xcell_x:ycell_y)[ans.plane/2];
+    vector<float> & cells = (view == geo::kX? xcell_x:ycell_y)[ans.plane/2];
 
     const float t = (view == geo::kX? x: y);
     const vector<float>::iterator ci
@@ -220,7 +217,6 @@ static std::pair<trackpoint, trackpoint> cart_to_cp(
 
   return answer;
 }
-
 
 void noe::produce(art::Event& evt)
 {
