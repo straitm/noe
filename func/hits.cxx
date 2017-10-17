@@ -5,6 +5,7 @@
 #include "event.h"
 #include "drawing.h"
 #include "geo.h"
+#include "status.h"
 
 extern std::vector<noeevent> theevents;
 extern int gevi;
