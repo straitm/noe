@@ -32,8 +32,6 @@ TODO:
 
 * Adapt to the window size intelligently.
 
-* Add some reconstructed information.
-
 */
 
 #include <gtk/gtk.h>
@@ -41,15 +39,10 @@ TODO:
 #include <vector>
 #include <algorithm>
 #include <string.h>
+#include "drawing.h"
 #include "event.h"
 #include "geo.h"
-
-struct DRAWPARS{
-  // The ticks to draw right now, typically just the minimum needed
-  // and not the whole range that is visible.
-  int32_t firsttick, lasttick;
-  bool clear;
-};
+#include "tracks.h"
 
 extern int viewsep; // vertical cell widths between x and y views
 
@@ -66,7 +59,7 @@ static int TDCSTEP = 4;
 
 /* The events and the current event index in the vector */
 extern std::vector<noeevent> theevents;
-static int gevi = 0;
+int gevi = 0;
 
 extern int first_mucatcher, ncells_perplane;
 extern int nplanes;
@@ -222,32 +215,6 @@ static bool visible_hit(const int32_t tdc)
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
 }
 
-static void draw_trackseg(cairo_t * cr, const trackpoint & point1,
-                                        const trackpoint & point2)
-{
-  if(point1.plane%2 ^ point2.plane%2) return; // shouldn't happen
-
-  const int screenx1 = det_to_screen_x(point1.plane)
-                     + (0.5 + point1.fplane)*pixx/2;
-  const int screenx2 = det_to_screen_x(point2.plane)
-                     + (0.5 + point2.fplane)*pixx/2;
-
-  const int screeny1 = det_to_screen_y(point1.plane, point1.cell)
-                     + (0.5 - point1.fcell)*pixy;
-  const int screeny2 = det_to_screen_y(point2.plane, point2.cell)
-                     + (0.5 - point2.fcell)*pixy;
-
-  /* Do not try to optimize by not drawing track segments that are entirely out
-     of the view, because I don't want to do the work, and I suspect the
-     performance advantage is small in most cases (but haven't checked). */
-
-  cairo_set_source_rgb(cr, 0, 1, 1);
-
-  cairo_move_to(cr, screenx1, screeny1);
-  cairo_line_to(cr, screenx2, screeny2);
-  cairo_stroke(cr);
-}
-
 // Draw a single hit to the screen, taking into account whether it is the
 // "active" hit (i.e. being moused over right now).
 static void draw_hit(cairo_t * cr, const hit & thishit)
@@ -399,14 +366,6 @@ static void set_eventn_status()
   set_eventn_status2();
 }
 
-static void draw_tracks_in_one_view(cairo_t * cr,
-                                   const std::vector<trackpoint> & traj)
-{
-  if(traj.size() < 2) return;
-  for(unsigned int h = 0; h < traj.size()-1; h++)
-    draw_trackseg(cr, traj[h], traj[h+1]);
-}
-
 // Draw all the hits in the event that we need to draw, depending on
 // whether we are animating or have been exposed, etc.
 static void draw_hits(cairo_t ** cr, const DRAWPARS * const drawpars)
@@ -431,12 +390,6 @@ static void draw_hits(cairo_t ** cr, const DRAWPARS * const drawpars)
       set_eventn_status2progress(ndrawn, THEhits.size());
 
     draw_hit(cr[thishit.plane%2 == 1?kX:kY], thishit);
-  }
-
-  // XXX probably shouldn't be inside of draw_hits()
-  for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
-    draw_tracks_in_one_view(cr[kX], theevents[gevi].tracks[i].trajx);
-    draw_tracks_in_one_view(cr[kY], theevents[gevi].tracks[i].trajy);
   }
 }
 
@@ -530,6 +483,8 @@ static void draw_event(const DRAWPARS * const drawpars)
   if(drawpars->clear) draw_background(cr);
 
   draw_hits(cr, drawpars);
+  draw_tracks(cr, drawpars);
+
   set_eventn_status(); // overwrite anything that draw_hits did
 
   for(int i = 0; i < kXorY; i++){
