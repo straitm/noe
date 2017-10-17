@@ -163,7 +163,7 @@ static int screen_to_activecell(noe_view_t view, const int x, const int y)
   return closestcell;
 }
 
-// draw_event_and to_next_free_run circularly refer to each other...
+// draw_event and to_next_free_run circularly refer to each other...
 static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
 
 static void draw_whole_user_event()
@@ -590,8 +590,7 @@ static void adjustspeed(GtkWidget * wg,
 // don't really want to call this 100 times when a user slowly resizes a window
 // that takes a long time to draw, but nor do I want to write a complex system
 // for dealing with that case...
-static gboolean redraw_window(GtkWidget * win,
-                              GdkEventConfigure * event,
+static gboolean redraw_window(GtkWidget * win, GdkEventConfigure * event,
                               __attribute__((unused)) gpointer d)
 {
   static int oldwidth = event->width, oldheight = event->height;
