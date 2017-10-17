@@ -86,6 +86,8 @@ __attribute__((unused)) static void add_test_nd_event()
 
 // Called by get_int_plane_and_cell() and calls itself recursively until
 // it gets an answer.
+//
+// This is awfully slow, taking like 0.6s per event for FD cosmics
 static trackpoint get_int_plane_and_cell_r(const int rdepth,
   art::ServiceHandle<geo::Geometry> & geo,
   const double  x, const double  y, const double  z,
@@ -103,25 +105,36 @@ static trackpoint get_int_plane_and_cell_r(const int rdepth,
   }
 
   if(ok){
-    if(view == geo::kXorY) return ans;
-    if(ans.plane%2 == 1 && view == geo::kX) return ans;
-    if(ans.plane%2 == 0 && view == geo::kY) return ans;
+    if(view == geo::kXorY ||
+      (ans.plane%2 == 1 && view == geo::kX) ||
+      (ans.plane%2 == 0 && view == geo::kY)){
+
+      return ans;
+    }
   }
 
-  if(rdepth > 3*3*3*30){
-    printf("Couldn't find the cell/plane for (%.1f, %.1f, %.1f)\n", x, y, z);
+  if(rdepth > 7*20){
+    fprintf(stderr, "Couldn't find the cell/plane for (%.1f, %.1f, %.1f)\n", x, y, z);
     ans.plane = ans.cell = 0;
     return ans;
   }
 
-  // search progressively farther away in each direction in a crazy pattern.
-  const int gox =  rdepth   %3 - 1;
-  const int goy = (rdepth/3)%3 - 1;
-  const int goz = (rdepth/9)%3 - 1;
+  // search progressively farther inward
+  bool gox, goy, goz;
+  switch(rdepth%7){
+    case 0: gox = fabs(x)>fabs(y); goy = !gox; goz = false; break;
+    case 1: gox = fabs(y)>fabs(x); goy = !gox; goz = false; break;
+    case 2: gox = false; goy = false; goz = true ; break;
+    case 3: gox = false; goy = true ; goz = true ; break;
+    case 4: gox = true ; goy = false; goz = true ; break;
+    case 5: gox = true ; goy = true ; goz = false; break;
+    default:gox = true ; goy = true ; goz = true ; break;
+  }
+  const double step = 3.0*pow(1.25, rdepth/7 + 1);
   return get_int_plane_and_cell_r(rdepth+1, geo, x, y, z, view,
-    gox*pow(1.5, rdepth/3/3/3 + 1),
-    goy*pow(1.5, rdepth/3/3/3 + 1),
-    goz*pow(1.5, rdepth/3/3/3 + 1));
+    -x/fabs(x)        *gox*step,
+    -y/fabs(y)        *goy*step,
+    (z < 600.0? 1: -1)*goz*step);
 }
 
 // Given a position in 3-space, return a plane and cell that (preferably)
