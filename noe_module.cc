@@ -151,6 +151,8 @@ static trackpoint get_int_plane_and_cell(
 // Given a Cartesian position, tp, representing a track point, return the
 // position in floating-point plane and cell number for both views where an
 // integer means the cell center.
+//
+// XXX I don't think it gives the right fractions for the muon catcher
 static std::pair<trackpoint, trackpoint> cart_to_cp(
   art::ServiceHandle<geo::Geometry> & geo, const TVector3 &tp)
 {
