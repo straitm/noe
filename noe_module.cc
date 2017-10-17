@@ -84,6 +84,111 @@ __attribute__((unused)) static void add_test_nd_event()
   theevents.push_back(ev);
 }
 
+// Called by get_int_plane_and_cell() and calls itself recursively until
+// it gets an answer.
+static trackpoint get_int_plane_and_cell_r(const int rdepth,
+  art::ServiceHandle<geo::Geometry> & geo,
+  const double  x, const double  y, const double  z,
+  const geo::View_t view,
+  const double dx, const double dy, const double dz)
+{
+  trackpoint ans;
+  const double X = x+dx, Y = y+dy, Z = z+dz;
+  bool ok = true;
+  try{
+    geo->getPlaneAndCellID(X, Y, Z, ans.plane, ans.cell);
+  }
+  catch(cet::exception e){
+    ok = false;
+  }
+
+  if(ok){
+    if(view == geo::kXorY) return ans;
+    if(ans.plane%2 == 1 && view == geo::kX) return ans;
+    if(ans.plane%2 == 0 && view == geo::kY) return ans;
+  }
+
+  if(rdepth > 3*3*3*30){
+    printf("Couldn't find the cell/plane for (%.1f, %.1f, %.1f)\n", x, y, z);
+    ans.plane = ans.cell = 0;
+    return ans;
+  }
+
+  // search progressively farther away in each direction in a crazy pattern.
+  const int gox =  rdepth   %3 - 1;
+  const int goy = (rdepth/3)%3 - 1;
+  const int goz = (rdepth/9)%3 - 1;
+  return get_int_plane_and_cell_r(rdepth+1, geo, x, y, z, view,
+    gox*pow(1.5, rdepth/3/3/3 + 1),
+    goy*pow(1.5, rdepth/3/3/3 + 1),
+    goz*pow(1.5, rdepth/3/3/3 + 1));
+}
+
+// Given a position in 3-space, return a plane and cell that (preferably)
+// that position is inside of or (quite often) is somewhere near. If
+// view is kXorY, returns whichever view it finds.  Otherwise, requires
+// that it's the named view.
+static trackpoint get_int_plane_and_cell(
+  art::ServiceHandle<geo::Geometry> & geo,
+  const double x, const double y, const double z, const geo::View_t view)
+{
+  return get_int_plane_and_cell_r(0, geo, x, y, z, view, 0, 0, 0);
+}
+
+// Given a Cartesian position, tp, representing a track point, return the
+// position in floating-point plane and cell number for both views where an
+// integer means the cell center.
+static std::pair<trackpoint, trackpoint> cart_to_cp(
+  art::ServiceHandle<geo::Geometry> & geo, const TVector3 &tp)
+{
+  // fragile
+  const double meanplanesep = 6.6681604;
+  const double meancellsep = 3.9674375;
+
+  // First find the position for the view that the point is really in.
+  trackpoint tp_nativeview = get_int_plane_and_cell(geo, tp.X(), tp.Y(), tp.Z(),
+    geo::kXorY);
+  double cellcenter[3], cellhalfsize[3] /* includes PVC but not glue or air? */;
+
+  geo::View_t nativeview;
+  geo->CellInfo(tp_nativeview.plane, tp_nativeview.cell,
+                &nativeview, cellcenter, cellhalfsize);
+  tp_nativeview.fcell =
+    nativeview == geo::kX? (tp.X() - cellcenter[0])/meancellsep
+                         : (tp.Y() - cellcenter[1])/meancellsep;
+
+  tp_nativeview.fplane = (tp.Z() - cellcenter[2])/meanplanesep;
+
+  // Now shift down one plane and find the cell and plane
+  trackpoint tp_otherview = get_int_plane_and_cell(geo, tp.X(), tp.Y(),
+    tp.Z() + meanplanesep, nativeview == geo::kX?geo::kY:geo::kX);
+
+  geo::View_t otherview;
+  geo->CellInfo(tp_otherview.plane, tp_otherview.cell,
+                &otherview, cellcenter, cellhalfsize);
+  tp_otherview.fcell =
+    otherview == geo::kX? (tp.X() - cellcenter[0])/meancellsep
+                        : (tp.Y() - cellcenter[1])/meancellsep;
+
+  tp_otherview.fplane = (tp.Z() - cellcenter[2])/meanplanesep;
+
+  // Should not happen (should!)
+  if(nativeview == otherview)
+    fprintf(stderr, "Oh no, got the same view twice!\n");
+
+  std::pair<trackpoint, trackpoint> answer;
+  if(nativeview == geo::kX){
+    answer.first  = tp_nativeview;
+    answer.second = tp_otherview;
+  }
+  else{
+    answer.first  = tp_otherview;
+    answer.second = tp_nativeview;
+  }
+  return answer;
+}
+
+
 void noe::produce(art::Event& evt)
 {
   signal(SIGINT, SIG_DFL); // just exit on Ctrl-C
@@ -134,40 +239,22 @@ void noe::produce(art::Event& evt)
     thehit.good_tns = c.GoodTiming();
     ev.addhit(thehit);
   }
-  if(tracks.isValid()){
-    for(unsigned int i = 0; i < tracks->size(); i++){
-      track thetrack;
-      thetrack.startx = (*tracks)[i].Start().X();
-      thetrack.starty = (*tracks)[i].Start().Y();
-      thetrack.startz = (*tracks)[i].Start().Z();
-      thetrack.stopx = (*tracks)[i].Stop().X();
-      thetrack.stopy = (*tracks)[i].Stop().Y();
-      thetrack.stopz = (*tracks)[i].Stop().Z();
-      for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
-        hit thehit;
-        thehit.cell = (*tracks)[i].Cell(c)->Cell();
-        thehit.plane = (*tracks)[i].Cell(c)->Plane();
-        thetrack.hits.push_back(thehit);
-      }
-      for(unsigned int p = 0; p < (*tracks)[i].NTrajectoryPoints(); p++){
-        const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
-        int plane, cell;
-        try{
-          (*geo)->getPlaneAndCellID(tp.X(), tp.Y(), tp.Z(), plane, cell);
-          hit thehit;
-          thehit.cell = cell;
-          thehit.plane = plane;
-          if(plane%2 == 1) thetrack.trajx.push_back(thehit);
-          else             thetrack.trajy.push_back(thehit);
-        }
-        catch(cet::exception e){
-          // If the unique cell id doesn't decode to a cell and plane, just
-          // ignore the point.
-          ;
-        }
-      }
-      ev.addtrack(thetrack);
+
+  for(unsigned int i = 0; tracks.isValid() && i < tracks->size(); i++){
+    track thetrack;
+    for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
+      hit thehit;
+      thehit.cell = (*tracks)[i].Cell(c)->Cell();
+      thehit.plane = (*tracks)[i].Cell(c)->Plane();
+      thetrack.hits.push_back(thehit);
     }
+    for(unsigned int p = 0; p < (*tracks)[i].NTrajectoryPoints(); p++){
+      const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
+        const std::pair<trackpoint, trackpoint> tps = cart_to_cp(*geo, tp);
+        thetrack.trajx.push_back(tps.first);
+        thetrack.trajy.push_back(tps.second);
+    }
+    ev.addtrack(thetrack);
   }
 
   theevents.push_back(ev);

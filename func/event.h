@@ -4,12 +4,15 @@ struct hit{
   bool good_tns;
 };
 
+struct trackpoint{
+  int cell, plane;
+  float fcell, fplane;
+};
+
 struct track{
-  float startx, starty, startz;
-  float stopx, stopy, stopz;
   std::vector<hit> hits;
-  std::vector<hit> trajx; // maybe want better precision than hit level?
-  std::vector<hit> trajy;
+  std::vector<trackpoint> trajx;
+  std::vector<trackpoint> trajy;
 };
 
 struct noeevent{

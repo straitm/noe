@@ -50,8 +50,16 @@ int det_to_screen_x(const int plane);
 // return -1.
 int screen_to_plane(const noe_view_t view, const int x);
 
+// Same as screen_to_plane(), but is happy to return negative numbers and
+// numbers bigger than the number of planes.
+int screen_to_plane_unbounded(const noe_view_t view, const int x);
+
 // Given a screen position, returns the cell number.  If this position is
 // outside the detector boxes on the right or left, return -1.  If this
 // position is outside the detector boxes to the top or bottom, returns a cell
 // number as if the detector continued in that direction.
 int screen_to_cell(const noe_view_t view, const int x, const int y);
+
+// Same as screen_to_cell(), but is happy to return negative numbers and
+// numbers bigger than the number of cells.
+int screen_to_cell_unbounded(const noe_view_t view, const int x, const int y);

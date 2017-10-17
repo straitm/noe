@@ -141,16 +141,6 @@ static bool zoomed()
   return (isfd && pixx != FDpixx) || (!isfd && pixx != NDpixx);
 }
 
-static int unzoomedpixx()
-{
-  return isfd? FDpixx: NDpixx;
-}
-
-static int unzoomedpixy()
-{
-  return isfd? FDpixy: NDpixy;
-}
-
 // Given a hit energy, set red, green and blue to the color we want to display
 // for the hit.  If "active" is true, set a brighter color.  This is intended
 // for when the user has moused over the cell.
@@ -232,15 +222,20 @@ static bool visible_hit(const int32_t tdc)
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
 }
 
-static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
+static void draw_trackseg(cairo_t * cr, const trackpoint & point1,
+                                        const trackpoint & point2)
 {
-  if(hit1.plane%2 ^ hit2.plane%2) return;
+  if(point1.plane%2 ^ point2.plane%2) return; // shouldn't happen
 
-  const int screenx1 = det_to_screen_x(hit1.plane);
-  const int screenx2 = det_to_screen_x(hit2.plane);
+  const int screenx1 = det_to_screen_x(point1.plane)
+                     + (0.5 + point1.fplane)*pixx/2;
+  const int screenx2 = det_to_screen_x(point2.plane)
+                     + (0.5 + point2.fplane)*pixx/2;
 
-  const int screeny1 = det_to_screen_y(hit1.plane, hit1.cell);
-  const int screeny2 = det_to_screen_y(hit2.plane, hit2.cell);
+  const int screeny1 = det_to_screen_y(point1.plane, point1.cell)
+                     + (0.5 - point1.fcell)*pixy;
+  const int screeny2 = det_to_screen_y(point2.plane, point2.cell)
+                     + (0.5 - point2.fcell)*pixy;
 
   /* Do not try to optimize by not drawing track segments that are entirely out
      of the view, because I don't want to do the work, and I suspect the
@@ -248,8 +243,8 @@ static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
 
   cairo_set_source_rgb(cr, 0, 1, 1);
 
-  cairo_move_to(cr, screenx1+pixx/2, screeny1+pixy/2);
-  cairo_line_to(cr, screenx2+pixx/2, screeny2+pixy/2);
+  cairo_move_to(cr, screenx1, screeny1);
+  cairo_line_to(cr, screenx2, screeny2);
   cairo_stroke(cr);
 }
 
@@ -280,7 +275,7 @@ static void draw_hit(cairo_t * cr, const hit & thishit)
   // draw all the way across to the next plane in the view to be easier
   // to look at.  If cells are visually large, make them closer to the
   // actual size of the scintillator.
-  const bool xexpand = true; // pixx <= 7;
+  const bool xexpand = pixx <= 3;
   const int epixx = xexpand?pixx:scintpix_from_pixx(pixx);
 
   // This is the only part of drawing an event that takes any time
@@ -404,7 +399,8 @@ static void set_eventn_status()
   set_eventn_status2();
 }
 
-static void draw_tracks_in_one_view(cairo_t * cr, const std::vector<hit> & traj)
+static void draw_tracks_in_one_view(cairo_t * cr,
+                                   const std::vector<trackpoint> & traj)
 {
   if(traj.size() < 2) return;
   for(unsigned int h = 0; h < traj.size()-1; h++)
@@ -804,15 +800,6 @@ static void dopanning(const noe_view_t V, GdkEventMotion * gevent)
   screenxoffset += oldx - gevent->x;
   *yoffset      += oldy - gevent->y;
 
-  if(screenxoffset < 0) screenxoffset = 0;
-  if(*yoffset      < 0) *yoffset      = 0;
-
-  const int maxxpan = total_x_pixels(pixx) - total_x_pixels(unzoomedpixx());
-  const int maxypan = total_y_pixels(pixy) - total_y_pixels(unzoomedpixy());
-
-  if(screenxoffset >= maxxpan) screenxoffset = maxxpan;
-  if(*yoffset      >= maxypan) *yoffset      = maxypan;
-
   oldx = gevent->x, oldy = gevent->y;
 
   redraw_event(NULL, NULL, NULL);
@@ -854,8 +841,8 @@ static gboolean dozooming(GtkWidget * widg,
 
   const noe_view_t V = widg == edarea[kX]?kX:kY;
   int * yoffset = V == kX?&screenyoffset_xview:&screenyoffset_yview;
-  const int plane = screen_to_plane(V, (int)gevent->x);
-  const int cell  = screen_to_cell (V, (int)gevent->x, (int)gevent->y);
+  const int plane = screen_to_plane_unbounded(V, (int)gevent->x);
+  const int cell  = screen_to_cell_unbounded (V, (int)gevent->x, (int)gevent->y);
 
   const int old_pixy = pixy;
 
@@ -871,14 +858,15 @@ static gboolean dozooming(GtkWidget * widg,
   // offset within the cell.
   const int newtoleft = det_to_screen_x(plane) + pixx/2;
   screenxoffset += newtoleft - (int)gevent->x;
-  if(screenxoffset < 0) screenxoffset = 0;
 
   const int newtotop = det_to_screen_y(plane, cell) + pixy/2;
   *yoffset += newtotop - (int)gevent->y;
-  if(*yoffset < 0) *yoffset = 0;
 
   // If we're back at the unzoomed view, clear offsets, even though this
   // violates the "don't move the hit under the mouse pointer" rule.
+  // This lets the user find things again if they got lost panning the
+  // detector way off the screen and it is just generally satisfying to
+  // have the detector snap into place in an orderly way.
   if(!zoomed())
     screenxoffset = screenyoffset_yview = screenyoffset_xview = 0;
 
