@@ -163,7 +163,7 @@ void setboxes()
   screenmu.ysize = yboxnomu;
 }
 
-int screen_to_plane(const noe_view_t view, const int x)
+int screen_to_plane_unbounded(const noe_view_t view, const int x)
 {
   // Where x would be if not offset
   const int unoffsetx = x + screenxoffset;
@@ -185,14 +185,18 @@ int screen_to_plane(const noe_view_t view, const int x)
                                   (halfp - halfmucatch)/2;
 
   // The plane number, except it might be out of range
-  const int p = halfp*2 + (view == kX);
+  return halfp*2 + (view == kX);
+}
 
+int screen_to_plane(const noe_view_t view, const int x)
+{
+  const int p = screen_to_plane_unbounded(view, x);
   if(p < (view == kX)) return -1; // XXX too clever
   if(p >= nplanes) return -1;
   return p;
 }
 
-int screen_to_cell(const noe_view_t view, const int x, const int y)
+int screen_to_cell_unbounded(const noe_view_t view, const int x, const int y)
 {
   // Where y would be if not offset.  Do not pass into functions.
   const int unoffsety = y + (view == kX?screenyoffset_xview:screenyoffset_yview);
@@ -201,7 +205,13 @@ int screen_to_cell(const noe_view_t view, const int x, const int y)
   const bool celldown = !((plane/2)%2 ^ (plane%2));
   const int effy = unoffsety - celldown*(pixy/2) - 2;
 
-  const int c = ncells_perplane - effy/pixy - 1;
+  return ncells_perplane - effy/pixy - 1;
+}
+
+int screen_to_cell(const noe_view_t view, const int x, const int y)
+{
+  const int c = screen_to_cell_unbounded(view, x, y);
+  const int plane = screen_to_plane(view, x);
   if(c < 0) return -1;
   if(c >= ncells_perplane) return -1;
   if(plane >= first_mucatcher && view == kY && c >= 2*ncells_perplane/3) return -1;

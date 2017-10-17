@@ -32,8 +32,6 @@ TODO:
 
 * Adapt to the window size intelligently.
 
-* Add some reconstructed information.
-
 */
 
 #include <gtk/gtk.h>
@@ -41,20 +39,13 @@ TODO:
 #include <vector>
 #include <algorithm>
 #include <string.h>
+#include "drawing.h"
 #include "event.h"
 #include "geo.h"
-
-struct DRAWPARS{
-  // The ticks to draw right now, typically just the minimum needed
-  // and not the whole range that is visible.
-  int32_t firsttick, lasttick;
-  bool clear;
-};
-
-extern int viewsep; // vertical cell widths between x and y views
-
-// Maximum length of any string being printed to a status bar
-static const int MAXSTATUS = 1024;
+#include "tracks.h"
+#include "hits.h"
+#include "status.h"
+#include "zoompan.h"
 
 // Let's see.  I believe both detectors read out in increments of 4 TDC units,
 // but the FD is multiplexed whereas the ND isn't, so any given channel at the
@@ -66,23 +57,20 @@ static int TDCSTEP = 4;
 
 /* The events and the current event index in the vector */
 extern std::vector<noeevent> theevents;
-static int gevi = 0;
+int gevi = 0;
+
+int active_plane = -1, active_cell = -1;
 
 extern int first_mucatcher, ncells_perplane;
 extern int nplanes;
-extern int pixx, pixy;
-extern int FDpixy, FDpixx;
-extern int NDpixy, NDpixx;
-extern rect screenview[kXorY], screenmu;
-extern int screenxoffset, screenyoffset_xview, screenyoffset_yview;
-extern bool isfd;
 
-/* GTK objects */
-static const int NSTATBOXES = 4;
+/* GTK objects owned elsewhere */
+extern GtkWidget * statbox[NSTATBOXES];
+extern GtkTextBuffer * stattext[NSTATBOXES];
+
+/* GTK objects owned here */
 static GtkWidget * win = NULL;
-static GtkWidget * statbox[NSTATBOXES];
-static GtkTextBuffer * stattext[NSTATBOXES];
-static GtkWidget * edarea[2] = { NULL }; // X and Y views
+extern GtkWidget * edarea[2]; // X and Y views
 static GtkWidget * animate_checkbox = NULL,
                  * cum_ani_checkbox = NULL,
                  * freerun_checkbox = NULL;
@@ -93,11 +81,9 @@ static GtkWidget * maxtickslider = NULL;
 static GtkObject * speedadj = NULL;
 
 /* Running flags.  */
-static bool ghave_read_all = false;
+bool ghave_read_all = false;
 static bool prefetching = false;
 static bool adjusttick_callback_inhibit = false; // XXX ug
-
-static int active_plane = -1, active_cell = -1;
 
 /* Ticky boxes flags */
 // Animate must start false, because the first thing that happens is that we
@@ -115,333 +101,10 @@ static gulong animationinterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
 static gulong animatetimeoutid = 0;
 
-
-// This hack allows us to get proper minus signs that look a lot better
-// than the hyphens that printf puts out.  I'm sure there's a better
-// way to do this.
-#define BOTANY_BAY_OH_NO(x) x < 0?"−":"", fabs(x)
-#define BOTANY_BAY_OH_INT(x) x < 0?"−":"", abs(x)
-
-// Update the given status bar to the given text
-static void set_status(const int boxn, const char * format, ...)
-{
-  va_list ap;
-  va_start(ap, format);
-  static char buf[MAXSTATUS];
-  vsnprintf(buf, MAXSTATUS-1, format, ap);
-
-  gtk_text_buffer_set_text(stattext[boxn], buf, strlen(buf));
-  gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[boxn]), stattext[boxn]);
-  gtk_widget_draw(statbox[boxn], NULL);
-}
-
-// True if we are zoomed, i.e. not at the full detector view.
-static bool zoomed()
-{
-  return (isfd && pixx != FDpixx) || (!isfd && pixx != NDpixx);
-}
-
-static int unzoomedpixx()
-{
-  return isfd? FDpixx: NDpixx;
-}
-
-static int unzoomedpixy()
-{
-  return isfd? FDpixy: NDpixy;
-}
-
-// Given a hit energy, set red, green and blue to the color we want to display
-// for the hit.  If "active" is true, set a brighter color.  This is intended
-// for when the user has moused over the cell.
-static void colorhit(const int32_t adc, float & red, float & green, float & blue,
-                     const bool active)
-{
-  // Oh so hacky!
-  const float graycut = 60;
-  const float nextcut = 120;
-  if(adc < graycut) red = green = blue = 0.2 + 0.3*adc/graycut;
-  else if(adc < nextcut)
-    blue  = 0.5 + 0.5*(adc-graycut)/(nextcut-graycut),
-    red   = 0.5 - 0.5*(adc-graycut)/(nextcut-graycut),
-    green = 0.5 - 0.5*(adc-graycut)/(nextcut-graycut);
-  else if(adc < 600) blue  = 1, red = green = 0;
-  else if(adc < 800) blue = 1-(adc-600)/200.0,
-                     green  = (adc-600)/200.0,
-                     red = 0;
-  else if(adc < 1200) green = 1, red = blue  = 0;
-  else if(adc < 1400) green = 1-(adc-1200)/200.0,
-                      red   =   (adc-1200)/200.0,
-                      blue = 0;
-  else red = 1, green = blue  = 0;
-
-  // Brighten this hit while trying to retain some of its original color, but
-  // just make it white if that is what it takes to make a difference.
-  if(active){
-    const float goal = 1.3;
-    const float left = 3 - red - blue - green;
-    if(left < goal){
-      red = blue = green = 1;
-    }
-    else{
-      red += goal*(1 - red)/left;
-      blue += goal*(1 - blue)/left;
-      green += goal*(1 - green)/left;
-    }
-  }
-}
-
-__attribute__((unused)) static bool by_charge(const hit & a, const hit & b)
-{
-  return a.adc < b.adc;
-}
-
-__attribute__((unused)) static bool by_time(const hit & a, const hit & b)
-{
-  return a.tdc < b.tdc;
-}
-
-// Blank the drawing area and draw the detector bounding boxes
-static void draw_background(cairo_t ** cr)
-{
-  setboxes();
-  for(int i = 0; i < kXorY; i++){
-    cairo_set_source_rgb(cr[i], 0, 0, 0);
-    cairo_paint(cr[i]);
-
-    cairo_set_source_rgb(cr[i], 1, 0, 1);
-    cairo_set_line_width(cr[i], 1.0);
-
-    // detector box
-    cairo_rectangle(cr[i], 0.5+screenview[i].xmin, 0.5+screenview[i].ymin,
-                               screenview[i].xsize,    screenview[i].ysize);
-    cairo_stroke(cr[i]);
-  }
-
-  // Y-view muon catcher empty box
-  if(first_mucatcher < nplanes){
-    cairo_rectangle(cr[kY], 0.5+screenmu.xmin, 0.5+screenmu.ymin,
-                            screenmu.xsize, screenmu.ysize);
-    cairo_stroke(cr[kY]);
-  }
-}
-
 static bool visible_hit(const int32_t tdc)
 {
   return tdc <= theevents[gevi].current_maxtick &&
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
-}
-
-static void draw_trackseg(cairo_t * cr, const hit & hit1, const hit & hit2)
-{
-  if(hit1.plane%2 ^ hit2.plane%2) return;
-
-  const int screenx1 = det_to_screen_x(hit1.plane);
-  const int screenx2 = det_to_screen_x(hit2.plane);
-
-  const int screeny1 = det_to_screen_y(hit1.plane, hit1.cell);
-  const int screeny2 = det_to_screen_y(hit2.plane, hit2.cell);
-
-  /* Do not try to optimize by not drawing track segments that are entirely out
-     of the view, because I don't want to do the work, and I suspect the
-     performance advantage is small in most cases (but haven't checked). */
-
-  cairo_set_source_rgb(cr, 0, 1, 1);
-
-  cairo_move_to(cr, screenx1+pixx/2, screeny1+pixy/2);
-  cairo_line_to(cr, screenx2+pixx/2, screeny2+pixy/2);
-  cairo_stroke(cr);
-}
-
-// Draw a single hit to the screen, taking into account whether it is the
-// "active" hit (i.e. being moused over right now).
-static void draw_hit(cairo_t * cr, const hit & thishit)
-{
-  const noe_view_t V = thishit.plane%2 == 1?kX:kY;
-
-  // Get position of upper left corner.  If the zoom carries this hit entirely
-  // out of the view in screen y, don't waste cycles displaying it.
-  const int screenx = det_to_screen_x(thishit.plane);
-  if(screenx+pixx < 0) return;
-  if(screenx      > edarea[V]->allocation.width) return;
-
-  const int screeny = det_to_screen_y(thishit.plane, thishit.cell);
-  if(screeny+pixy < 0) return;
-  if(screeny      > edarea[V]->allocation.height) return;
-
-  float red, green, blue;
-
-  colorhit(thishit.adc, red, green, blue,
-           thishit.plane == active_plane && thishit.cell == active_cell);
-
-  cairo_set_source_rgb(cr, red, green, blue);
-
-  // If we're representing cells with a very small number of pixels,
-  // draw all the way across to the next plane in the view to be easier
-  // to look at.  If cells are visually large, make them closer to the
-  // actual size of the scintillator.
-  const bool xexpand = true; // pixx <= 7;
-  const int epixx = xexpand?pixx:scintpix_from_pixx(pixx);
-
-  // This is the only part of drawing an event that takes any time
-  // I have measured drawing a line to be twice as fast as drawing a
-  // rectangle of width 1, so it is totally worth it to have a special
-  // case.  This really helps with drawing big events.
-  if(pixy == 1){
-    cairo_move_to(cr, screenx,       screeny+0.5);
-    cairo_line_to(cr, screenx+epixx, screeny+0.5);
-  }
-  // This is a smaller gain, but it is definitely faster by about 10%.
-  else if(pixy == 2){
-    cairo_move_to(cr, screenx,       screeny+0.5);
-    cairo_line_to(cr, screenx+epixx, screeny+0.5);
-    cairo_move_to(cr, screenx,       screeny+1.5);
-    cairo_line_to(cr, screenx+epixx, screeny+1.5);
-  }
-  else{
-    cairo_rectangle(cr, screenx+0.5, screeny+0.5,
-                        epixx-1,     pixy-1);
-  }
-  cairo_stroke(cr);
-}
-
-// Set top status line, which reports on event level information
-static void set_eventn_status0()
-{
-  if(theevents.empty()){
-    set_status(0, "No events in file");
-    return;
-  }
-
-  set_status(0, "Run %'d, subrun %d, event %'d (%'d/%'d%s in the file)",
-    theevents[gevi].nrun, theevents[gevi].nsubrun,
-    theevents[gevi].nevent, gevi+1,
-    (int)theevents.size(), ghave_read_all?"":"+");
-}
-
-// Set second status line, which reports on timing information
-static void set_eventn_status1()
-{
-  noeevent & E = theevents[gevi];
-
-  char status1[MAXSTATUS];
-
-  int pos = snprintf(status1, MAXSTATUS, "Ticks %s%'d through %'d.  ",
-             BOTANY_BAY_OH_INT(E.mintick), E.maxtick);
-  if(E.current_mintick != E.current_maxtick)
-    pos += snprintf(status1+pos, MAXSTATUS-pos,
-      "Showing ticks %s%d through %s%d (%s%.3f through %s%.3f μs)",
-      BOTANY_BAY_OH_INT(E.current_mintick),
-      BOTANY_BAY_OH_INT(E.current_maxtick),
-      BOTANY_BAY_OH_NO( E.current_mintick/64.),
-      BOTANY_BAY_OH_NO( E.current_maxtick/64.));
-  else
-    pos += snprintf(status1+pos, MAXSTATUS-pos,
-      "Showing tick %s%d (%s%.3f μs)",
-      BOTANY_BAY_OH_INT(E.current_maxtick),
-      BOTANY_BAY_OH_NO( E.current_maxtick/64.));
-
-  set_status(1, status1);
-}
-
-// Set third status line, which reports on hit information
-static void set_eventn_status2()
-{
-  if(active_plane < 0 || active_cell < 0){
-    set_status(2, "Mouse over a cell for more information");
-    return;
-  }
-
-  char status2[MAXSTATUS];
-  int pos = snprintf(status2, MAXSTATUS, "Plane %d, cell %d: ",
-                     active_plane, active_cell);
-
-  // TODO: display calibrated energies when possible
-  std::vector<hit> & THEhits = theevents[gevi].hits;
-  bool needseparator = false;
-
-  // TODO: make this more flexible.
-  const int maxmatches = 2;
-  int matches = 0;
-  for(unsigned int i = 0; i < THEhits.size(); i++){
-    if(THEhits[i].plane == active_plane &&
-       THEhits[i].cell  == active_cell){
-      matches++;
-      if(matches <= maxmatches){
-        pos += pos >= MAXSTATUS?0:snprintf(status2+pos, MAXSTATUS-pos,
-            "%sTDC = %s%d (%s%.3f μs), TNS = %s%.3f μs%s, ADC = %s%d",
-            needseparator?"; ":"",
-            BOTANY_BAY_OH_INT(THEhits[i].tdc),
-            BOTANY_BAY_OH_NO (THEhits[i].tdc/64.),
-            BOTANY_BAY_OH_NO (THEhits[i].tns/1000),
-            THEhits[i].good_tns?"":"(bad)",
-            BOTANY_BAY_OH_INT(THEhits[i].adc));
-        needseparator = true;
-      }
-      else if(matches == maxmatches+1){
-        pos += pos >= MAXSTATUS?0:snprintf(status2+pos, MAXSTATUS-pos,
-            "; and more...");
-      }
-    }
-  }
-  set_status(2, status2);
-}
-
-// Set third status line to a special status when we are reading a big event
-static void set_eventn_status2progress(const int nhit, const int tothits)
-{
-  set_status(2, "Processing big event, %d/%d hits", nhit, tothits);
-}
-
-// Set all status lines
-static void set_eventn_status()
-{
-  set_eventn_status0();
-
-  if(theevents.empty()) return;
-
-  set_eventn_status1();
-  set_eventn_status2();
-}
-
-static void draw_tracks_in_one_view(cairo_t * cr, const std::vector<hit> & traj)
-{
-  if(traj.size() < 2) return;
-  for(unsigned int h = 0; h < traj.size()-1; h++)
-    draw_trackseg(cr, traj[h], traj[h+1]);
-}
-
-// Draw all the hits in the event that we need to draw, depending on
-// whether we are animating or have been exposed, etc.
-static void draw_hits(cairo_t ** cr, const DRAWPARS * const drawpars)
-{
-  for(int i = 0; i < kXorY; i++) cairo_set_line_width(cr[i], 1.0);
-
-  std::vector<hit> & THEhits = theevents[gevi].hits;
-
-  std::sort(THEhits.begin(), THEhits.end(), by_charge);
-
-  const int big = 100000;
-  const bool bigevent = THEhits.size() > big;
-
-  int ndrawn = 0;
-  for(unsigned int i = 0; i < THEhits.size(); i++){
-    const hit & thishit = THEhits[i];
-
-    if(thishit.tdc < drawpars->firsttick ||
-       thishit.tdc > drawpars->lasttick) continue;
-
-    if(bigevent && (++ndrawn)%big == 0)
-      set_eventn_status2progress(ndrawn, THEhits.size());
-
-    draw_hit(cr[thishit.plane%2 == 1?kX:kY], thishit);
-  }
-
-  // XXX probably shouldn't be inside of draw_hits()
-  for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
-    draw_tracks_in_one_view(cr[kX], theevents[gevi].tracks[i].trajx);
-    draw_tracks_in_one_view(cr[kY], theevents[gevi].tracks[i].trajy);
-  }
 }
 
 // Unhighlight the cell that is no longer being moused over, indicated by
@@ -463,7 +126,7 @@ static void change_highlighted_cell(GtkWidget * widg,
     hit & thishit = THEhits[i];
     if((thishit.plane == oldactive_plane && thishit.cell == oldactive_cell) ||
        (thishit.plane ==    active_plane && thishit.cell ==    active_cell))
-      draw_hit(cr, thishit);
+      draw_hit(cr, thishit, edarea);
   }
 
   // XXX also need to redraw tracks since we may have just stomped on some
@@ -500,61 +163,8 @@ static int screen_to_activecell(noe_view_t view, const int x, const int y)
   return closestcell;
 }
 
-// Size the drawing areas to the detector sizes at the starting zoom level.
-// This would not make sense if called after the user zooms and pans, so it
-// is only called on startup.
-static void request_edarea_size()
-{
-  for(int i = 0; i < kXorY; i++)
-    gtk_widget_set_size_request(edarea[i],
-      std::max(screenview[kX].xmax(), screenview[kY].xmax()) + 1,
-      std::max(screenview[kX].ymax(), screenview[kY].ymax()) + 1);
-}
-
-// draw_event_and to_next_free_run circularly refer to each other...
+// draw_event and to_next_free_run circularly refer to each other...
 static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
-
-// Draw a whole event, a range, or an animation frame, as dictated by
-// the DRAWPARS.
-static void draw_event(const DRAWPARS * const drawpars)
-{
-  set_eventn_status();
-  if(theevents.empty()) return;
-
-  if(!isfd && theevents[gevi].fdlike){
-    setfd();
-    request_edarea_size();
-  }
-
-  cairo_t * cr[kXorY];
-  for(int i = 0; i < kXorY; i++)
-    cairo_push_group(cr[i] = gdk_cairo_create(edarea[i]->window));
-
-  // Do not blank the display in the middle of an animation unless necessary
-  if(drawpars->clear) draw_background(cr);
-
-  draw_hits(cr, drawpars);
-  set_eventn_status(); // overwrite anything that draw_hits did
-
-  for(int i = 0; i < kXorY; i++){
-    cairo_pop_group_to_source(cr[i]);
-    cairo_paint(cr[i]);
-    cairo_destroy(cr[i]);
-  }
-}
-
-static gboolean redraw_event(__attribute__((unused)) GtkWidget *widg,
-                             __attribute__((unused)) GdkEventExpose * ee,
-                             __attribute__((unused)) gpointer data)
-{
-  DRAWPARS drawpars;
-  drawpars.firsttick = theevents[gevi].current_mintick;
-  drawpars.lasttick  = theevents[gevi].current_maxtick;
-  drawpars.clear = true;
-  draw_event(&drawpars);
-
-  return FALSE;
-}
 
 static void draw_whole_user_event()
 {
@@ -779,49 +389,9 @@ static void getuserevent()
   handle_event();
 }
 
-static int xonbutton1 = 0, yonbutton1 = 0;
-static int newbuttonpush = false;
-static gboolean mousebuttonpress(__attribute__((unused)) GtkWidget * widg,
-                                 GdkEventMotion * gevent,
-                                 __attribute__((unused)) gpointer data)
-{
-  xonbutton1 = gevent->x;
-  yonbutton1 = gevent->y;
-  newbuttonpush = true;
-  return TRUE;
-}
-
-static void dopanning(const noe_view_t V, GdkEventMotion * gevent)
-{
-  int * yoffset = V == kX?&screenyoffset_xview:&screenyoffset_yview;
-
-  static int oldx = xonbutton1, oldy = yonbutton1;
-  if(newbuttonpush){
-    oldx = xonbutton1, oldy = yonbutton1;
-    newbuttonpush = false;
-  }
-
-  screenxoffset += oldx - gevent->x;
-  *yoffset      += oldy - gevent->y;
-
-  if(screenxoffset < 0) screenxoffset = 0;
-  if(*yoffset      < 0) *yoffset      = 0;
-
-  const int maxxpan = total_x_pixels(pixx) - total_x_pixels(unzoomedpixx());
-  const int maxypan = total_y_pixels(pixy) - total_y_pixels(unzoomedpixy());
-
-  if(screenxoffset >= maxxpan) screenxoffset = maxxpan;
-  if(*yoffset      >= maxypan) *yoffset      = maxypan;
-
-  oldx = gevent->x, oldy = gevent->y;
-
-  redraw_event(NULL, NULL, NULL);
-}
-
 // Handle the mouse arriving at a spot in the drawing area. Find what cell the
 // user is pointing at, highlight it, and show information about it.
-static gboolean mouseover(GtkWidget * widg,
-                          GdkEventMotion * gevent,
+static gboolean mouseover(GtkWidget * widg, GdkEventMotion * gevent,
                           __attribute__((unused)) gpointer data)
 {
   if(gevent == NULL) return TRUE; // shouldn't happen
@@ -842,48 +412,6 @@ static gboolean mouseover(GtkWidget * widg,
 
   change_highlighted_cell(widg, oldactive_plane, oldactive_cell);
   set_eventn_status2();
-
-  return TRUE;
-}
-
-// XXX does the wrong thing if the cursor is in the muon catcher cutout
-static gboolean dozooming(GtkWidget * widg,
-                          GdkEventScroll * gevent,
-                          __attribute__((unused)) gpointer data)
-{
-  const bool up = gevent->direction == GDK_SCROLL_UP;
-
-  const noe_view_t V = widg == edarea[kX]?kX:kY;
-  int * yoffset = V == kX?&screenyoffset_xview:&screenyoffset_yview;
-  const int plane = screen_to_plane(V, (int)gevent->x);
-  const int cell  = screen_to_cell (V, (int)gevent->x, (int)gevent->y);
-
-  const int old_pixy = pixy;
-
-  if(up) pixy++;
-  else   pixy = std::max(isfd?FDpixy:NDpixy, pixy-1);
-
-  if(old_pixy == pixy) return TRUE;
-
-  pixx = pixx_from_pixy(pixy);
-
-  // Pick offsets that keep the center of the cell the pointer is over
-  // under the pointer.  There may be a small shift since we don't check the
-  // offset within the cell.
-  const int newtoleft = det_to_screen_x(plane) + pixx/2;
-  screenxoffset += newtoleft - (int)gevent->x;
-  if(screenxoffset < 0) screenxoffset = 0;
-
-  const int newtotop = det_to_screen_y(plane, cell) + pixy/2;
-  *yoffset += newtotop - (int)gevent->y;
-  if(*yoffset < 0) *yoffset = 0;
-
-  // If we're back at the unzoomed view, clear offsets, even though this
-  // violates the "don't move the hit under the mouse pointer" rule.
-  if(!zoomed())
-    screenxoffset = screenyoffset_yview = screenyoffset_xview = 0;
-
-  redraw_event(NULL, NULL, NULL);
 
   return TRUE;
 }
@@ -1062,8 +590,7 @@ static void adjustspeed(GtkWidget * wg,
 // don't really want to call this 100 times when a user slowly resizes a window
 // that takes a long time to draw, but nor do I want to write a complex system
 // for dealing with that case...
-static gboolean redraw_window(GtkWidget * win,
-                              GdkEventConfigure * event,
+static gboolean redraw_window(GtkWidget * win, GdkEventConfigure * event,
                               __attribute__((unused)) gpointer d)
 {
   static int oldwidth = event->width, oldheight = event->height;
@@ -1090,7 +617,6 @@ static void close_window()
 /*                          Widget setup                              */
 /**********************************************************************/
 
-// tick select spin button
 static GtkWidget * make_tickslider(const bool ismax)
 {
   const int initialticknum = 0;
@@ -1104,7 +630,6 @@ static GtkWidget * make_tickslider(const bool ismax)
   return tickslider;
 }
 
-// speed spin button
 static GtkWidget * make_speedslider()
 {
   const int initialspeednum = 6;
@@ -1166,7 +691,7 @@ static void setup()
     edarea[i] = gtk_drawing_area_new();
     g_signal_connect(edarea[i],"expose-event",G_CALLBACK(redraw_event),NULL);
     g_signal_connect(edarea[i], "motion-notify-event", G_CALLBACK(mouseover), NULL);
-    g_signal_connect(edarea[i], "scroll-event", G_CALLBACK(dozooming), NULL);
+    g_signal_connect(edarea[i], "scroll-event", G_CALLBACK(dozooming), new bool(i));
     g_signal_connect(edarea[i], "button-press-event",
                      G_CALLBACK(mousebuttonpress), NULL);
     gtk_widget_set_events(edarea[i], gtk_widget_get_events(edarea[i])
