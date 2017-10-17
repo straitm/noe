@@ -12,9 +12,8 @@ extern std::vector<noeevent> theevents;
 extern int gevi;
 extern bool isfd;
 extern rect screenview[kXorY], screenmu;
-extern int first_mucatcher, ncells_perplane;
+extern int first_mucatcher;
 extern int nplanes;
-
 
 GtkWidget * edarea[2] = { NULL }; // X and Y views
 
