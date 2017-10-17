@@ -182,6 +182,9 @@ static void build_cell_lookup_table(art::ServiceHandle<geo::Geometry> & geo)
 static std::pair<trackpoint, trackpoint> cart_to_cp(
   art::ServiceHandle<geo::Geometry> & geo, const TVector3 &tp)
 {
+  // With this lookup table (which isn't really a lookup table), finding
+  // track point uses ~15% of the time spent loading events.  Probably
+  // could go faster, although that's not too bad.
   {
     static int first = true;
     if(first) build_cell_lookup_table(geo);
@@ -209,6 +212,9 @@ static std::pair<trackpoint, trackpoint> cart_to_cp(
   answer.first.fcell  = (tp.X() - cellcenter[0])/meancellsep;
   answer.first.fplane = (tp.Z() - cellcenter[2])/meanplanesep;
 
+  // Could optimize this by only checking the nearest two planes to the one
+  // found above, but I bet that geo::CellInfo is the hot spot, not
+  // std::upper_bound.
   answer.second = get_int_plane_and_cell(tp.X(), tp.Y(), tp.Z(), geo::kY);
 
   geo->CellInfo(answer.second.plane, answer.second.cell, &dumv, cellcenter, dum);
