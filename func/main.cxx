@@ -233,9 +233,11 @@ static gboolean handle_event()
     // speed is set very slow
     animation_step(NULL);
 
-    animatetimeoutid =
-      g_timeout_add(std::max(1, (int)animationinterval),
-                    animation_step, NULL);
+    // Use a priority lower than G_PRIORITY_HIGH_IDLE + 10, which is
+    // what GTK uses for resizing.  This means that even while animating
+    // furiously, we'll still be responsive to window resizes.
+    animatetimeoutid = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE,
+      std::max(1, (int)animationinterval), animation_step, NULL, NULL);
   }
   else{
     if(animatetimeoutid) g_source_remove(animatetimeoutid);
@@ -439,8 +441,10 @@ static void start_freerun_timer()
   // processed between gtk_main_quit() and exiting the main loop, in
   // which case I have a bug that has only been suppressed instead of
   // fixed.
-  freeruntimeoutid =
-    g_timeout_add(std::max((gulong)1, freeruninterval), to_next_free_run, NULL);
+  //
+  // See comments on the animation timer for why we use this priority.
+  freeruntimeoutid = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE,
+    std::max((gulong)1, freeruninterval), to_next_free_run, NULL, NULL);
 }
 
 // Handle the user clicking the "run freely" check box.
