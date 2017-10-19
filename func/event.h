@@ -1,11 +1,18 @@
 struct hit{
-  int32_t cell, plane, adc, tdc;
-  float tns;
+  uint16_t cell, plane;
+  int16_t adc;
   bool good_tns;
+  int32_t tdc;
+  float tns;
 };
 
 struct trackpoint{
-  int cell, plane;
+  // The integer parts of the positions.
+  uint16_t cell, plane;
+
+  // The fractional part of the positions.  Half-precision would be sufficient,
+  // but is awkward to implement.  Integer representation is also difficult,
+  // since we cannot assume that these are within [-1, 1].
   float fcell, fplane;
 };
 
