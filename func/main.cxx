@@ -757,17 +757,20 @@ static void setup()
     NULL, NULL, NULL, speedlabel, NULL, NULL};
 
   for(int c = 0; c < ncol; c++){
-    gtk_table_attach_defaults(GTK_TABLE(tab), top_row_widgets[c], c, c+1, 0, 1);
+    gtk_table_attach(GTK_TABLE(tab), top_row_widgets[c], c, c+1, 0, 1,
+      GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
 
     if(second_row_widgets[c] != NULL){
-      gtk_table_attach_defaults(GTK_TABLE(tab),second_row_widgets[c],c,c+1,1,2);
+      gtk_table_attach(GTK_TABLE(tab),second_row_widgets[c],c,c+1,1,2,
+        GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
     }
     else{
       // Have to put a blank text box in each table cell or else the
       // background color is inconsistent.
       GtkWidget * blanklabel = gtk_text_view_new();
       gtk_text_view_set_editable(GTK_TEXT_VIEW(blanklabel), false);
-      gtk_table_attach_defaults(GTK_TABLE(tab), blanklabel, c, c+1, 1, 2);
+      gtk_table_attach(GTK_TABLE(tab), blanklabel, c, c+1, 1, 2,
+        GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
     }
   }
 
@@ -776,15 +779,20 @@ static void setup()
     stattext[i] = gtk_text_buffer_new(0);
     gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
-    gtk_table_attach_defaults(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i);
+    gtk_table_attach(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i,
+      GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
   }
 
   for(int i = 0; i < kXorY; i++)
-    gtk_table_attach_defaults(GTK_TABLE(tab), edarea[i], 0, ncol,
-                              2+NSTATBOXES+i*2, 3+NSTATBOXES+i*2); // too clever
+    gtk_table_attach(GTK_TABLE(tab), edarea[i], 0, ncol,
+                     2+NSTATBOXES+i*2, 3+NSTATBOXES+i*2, // too clever
+                     GtkAttachOptions(GTK_EXPAND | GTK_FILL),
+                     GtkAttachOptions(GTK_EXPAND | GTK_FILL), 0, 0);
 
-  gtk_table_attach_defaults(GTK_TABLE(tab), gtk_hseparator_new(), 0, ncol,
-                            3+NSTATBOXES, 4+NSTATBOXES);
+  gtk_table_attach(GTK_TABLE(tab), gtk_hseparator_new(), 0, ncol,
+                   3+NSTATBOXES, 4+NSTATBOXES,
+                   GtkAttachOptions(GTK_EXPAND | GTK_FILL),
+                   GtkAttachOptions(GTK_SHRINK), 0, 0);
 
   // This isn't the size I want, but along with requesting the size of the
   // edarea widgets, it has the desired effect, at least more or less.
