@@ -130,7 +130,9 @@ static void change_highlighted_cell(GtkWidget * widg,
       draw_hit(cr, thishit, edarea);
   }
 
-  // XXX also need to redraw tracks since we may have just stomped on some
+  // NOTE: In principle we should redraw tracks here since we may have just
+  // stomped on some.  However, in practice the visual effect isn't very
+  // noticeable and since it's kinda a pain to do it from here, we'll skip it.
 
   cairo_destroy(cr);
 }

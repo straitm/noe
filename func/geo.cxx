@@ -191,7 +191,7 @@ int screen_to_plane_unbounded(const noe_view_t view, const int x)
 int screen_to_plane(const noe_view_t view, const int x)
 {
   const int p = screen_to_plane_unbounded(view, x);
-  if(p < (view == kX)) return -1; // XXX too clever
+  if(p < (view == kX?1:0)) return -1;
   if(p >= nplanes) return -1;
   return p;
 }
