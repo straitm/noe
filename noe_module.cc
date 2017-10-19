@@ -2,6 +2,10 @@
 
 #include <vector>
 
+// For getting the event count when the file is opened
+#include "TTree.h"
+#include "art/Framework/Core/FileBlock.h"
+
 #include "art/Framework/Core/EDProducer.h"
 #include "art/Framework/Core/ModuleMacros.h"
 
@@ -26,6 +30,9 @@ class noe : public art::EDProducer {
   void produce(art::Event& evt);
   void endJob();
 
+  // Used to get the number of events in the file
+  void respondToOpenInputFile(art::FileBlock const &fb);
+
   // The art label for tracks that we are going to display, or the
   // empty string to display no tracks.
   std::string fTrackLabel;
@@ -37,6 +44,21 @@ noe::noe(fhicl::ParameterSet const & pset)
 }
 
 noe::~noe() { }
+
+void noe::respondToOpenInputFile(art::FileBlock const &fb)
+{
+  // Get the number of events as soon as the file opens. This looks
+  // really fragile. It gets the number of entries in *some* tree, which
+  // at the moment that I'm testing this turns out to be the right one,
+  // but EDProducer::respondToOpenInputFile is totally undocumented as
+  // far as I can see.
+  //
+  // Also, supposedly one can open more than one file in a job.
+  //
+  // Anyway, if this is the wrong number, it just means that the status
+  // display will be wrong about what fraction of the file is loaded.
+  theevents.reserve(fb.tree()->GetEntries());
+}
 
 void noe::endJob()
 {

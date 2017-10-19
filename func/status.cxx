@@ -45,10 +45,11 @@ void set_eventn_status0()
     return;
   }
 
-  set_status(0, "Run %'d, subrun %d, event %'d (%'d/%'d%s in the file)",
+  set_status(0, "Run %'d, subrun %d, event %'d "
+                "(%'d/%'d in the file, %.0f%% loaded)",
     theevents[gevi].nrun, theevents[gevi].nsubrun,
     theevents[gevi].nevent, gevi+1,
-    (int)theevents.size(), ghave_read_all?"":"+");
+    (int)theevents.capacity(), 100*float(theevents.size())/theevents.capacity());
 }
 
 void set_eventn_status1()

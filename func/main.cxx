@@ -100,6 +100,7 @@ static gulong freeruninterval = 0; // ms.  Immediately overwritten.
 static gulong animationinterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
 static gulong animatetimeoutid = 0;
+static gulong statmsgtimeoutid = 0;
 
 static bool visible_hit(const int32_t tdc)
 {
@@ -366,14 +367,15 @@ static void getuserevent()
      || endptr == optarg || *endptr != '\0'
      || !have_event_by_number(userevent)){
     if(!theevents.empty())
-      set_status(3, "Entered event invalid or not available. %sI have "
-                 "events %d through %d%s",
-                 ghave_read_all?"":"Currently ",
+      set_status(3, "Entered event invalid or not available. I have "
+                 "events %d through %d%s%s",
                  theevents[0].nevent,
                  theevents[theevents.size()-1].nevent,
                  theevents[theevents.size()-1].nevent-theevents[0].nevent
-                 == theevents.size()-1?"":" (not consecutive)");
-    g_timeout_add(8e3, clear_error_message, NULL);
+                 == theevents.size()-1?"":" (not consecutive)",
+                 ghave_read_all?"":". I'm still loading events.");
+    if(statmsgtimeoutid) g_source_remove(statmsgtimeoutid);
+    statmsgtimeoutid = g_timeout_add(8e3, clear_error_message, NULL);
     return;
   }
 
