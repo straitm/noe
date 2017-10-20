@@ -59,14 +59,20 @@ gboolean dozooming(GtkWidget * widg, GdkEventScroll * gevent, gpointer data)
   const noe_view_t V = (*(bool *)data)?kY:kX;
   int * yoffset       = V == kX?&screenyoffset_xview:&screenyoffset_yview;
   int * other_yoffset = V == kY?&screenyoffset_xview:&screenyoffset_yview;
+
   const int plane = screen_to_plane_unbounded(V, (int)gevent->x);
   const int cell  = screen_to_cell_unbounded (V, (int)gevent->x, (int)gevent->y);
+
+  // Pixels away from the plane left edge and cell top edge
+  const int planepix = (int)gevent->x - det_to_screen_x(plane);
+  const int cellpix  = (int)gevent->y - det_to_screen_y(plane, cell);
 
   // In the view *not* being moused-over, zoom in y around the center of the
   // view.  This assumes the two views have the same size on the screen.
   const int other_cell = screen_to_cell_unbounded(V==kX?kY:kX,
                                      (int)gevent->x, widg->allocation.height/2);
-  const int old_pixy = pixy;
+
+  const int old_pixy = pixy, old_pixx = pixx;
 
   if(up) pixy++;
   else   pixy = std::max(isfd?FDpixy:NDpixy, pixy-1);
@@ -76,14 +82,18 @@ gboolean dozooming(GtkWidget * widg, GdkEventScroll * gevent, gpointer data)
   pixx = pixx_from_pixy(pixy);
 
   // Pick offsets that keep the center of the cell the pointer is over
-  // under the pointer.  There may be a small shift since we don't check the
-  // offset within the cell.
-  const int newtoleft = det_to_screen_x(plane) + pixx/2;
+  // under the pointer.  Try to keep the same part of the cell under
+  // the mouse so that zooming is roughly reversable.
+  const int newtoleft = det_to_screen_x(plane)
+                        + pixx*(float(planepix)/old_pixx);
   screenxoffset += newtoleft - (int)gevent->x;
 
-  const int newtotop = det_to_screen_y(plane, cell) + pixy/2;
+  const int newtotop = det_to_screen_y(plane, cell)
+                       + pixy*(float(cellpix)/old_pixy);
   *yoffset += newtotop - (int)gevent->y;
 
+  // This is hacky.  There is no plane with the right number in the other
+  // view, and the cell stagger confuses the coordinates.
   const int other_newtotop = det_to_screen_y(plane+1, other_cell) + pixy/2;
   *other_yoffset += other_newtotop - widg->allocation.height/2;
 
