@@ -250,11 +250,6 @@ void noe::produce(art::Event& evt)
 {
   signal(SIGINT, SIG_DFL); // just exit on Ctrl-C
 
-  // Not needed for hits, just for tracks.  Aggressively don't load the
-  // Geometry if it isn't needed.
-  art::ServiceHandle<geo::Geometry> * geo =
-    fTrackLabel == ""? NULL: new art::ServiceHandle<geo::Geometry>;
-
   art::Handle< vector<rb::CellHit> > cellhits;
 
   if(!evt.getByLabel("calhit", cellhits)){
@@ -264,12 +259,17 @@ void noe::produce(art::Event& evt)
 
   art::Handle< vector<rb::Track> > tracks;
   if(fTrackLabel != ""){
-    try{evt.getByLabel(fTrackLabel, tracks); }
-    catch(...){
+    if(!evt.getByLabel(fTrackLabel, tracks)){
       fprintf(stderr,
         "Warning: No tracks found with label \"%s\"\n", fTrackLabel.c_str());
+      fTrackLabel = "";
     }
   }
+
+  // Not needed for hits, just for tracks.  Aggressively don't load the
+  // Geometry if it isn't needed.
+  static art::ServiceHandle<geo::Geometry> * geo =
+    fTrackLabel == ""? NULL: new art::ServiceHandle<geo::Geometry>;
 
 #if 0
   if(theevents.empty()) add_test_nd_event();
