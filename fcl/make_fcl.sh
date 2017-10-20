@@ -13,16 +13,16 @@ doit()
 
   printf 'process_name: noe\n\n'
 
+  echo 'services:'
+  echo '{'
   if [ "$type" != notracks ]; then
-    echo 'services:'
-    echo '{'
     echo '  # For tracks'
     echo '  Geometry: @local::standard_geo'
     echo '  Detector: @local::standard_detector'
-    echo '  # Suppress "Begin processing the nth record" messages'
-    echo '  message: { destinations: { debugmsg:{ threshold: "WARNING"} } }'
-    printf '}\n\n'
   fi
+  echo '  # Suppress "Begin processing the nth record" messages'
+  echo '  message: { destinations: { debugmsg:{ threshold: "WARNING"} } }'
+  printf '}\n\n'
 
   if [ "$type" != default ]; then
      echo "UUDDLRLRBAS: @local::standard_noe"

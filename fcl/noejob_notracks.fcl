@@ -2,6 +2,12 @@
 
 process_name: noe
 
+services:
+{
+  # Suppress "Begin processing the nth record" messages
+  message: { destinations: { debugmsg:{ threshold: "WARNING"} } }
+}
+
 UUDDLRLRBAS: @local::standard_noe
 UUDDLRLRBAS.track_label: ""
 
