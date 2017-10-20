@@ -122,8 +122,11 @@ int det_to_screen_y(const int plane, const int cell)
 
          - (pixy-1)
 
-         // Physical stagger of planes in each view
-         + celldown*pixy/2
+         // Physical stagger of planes in each view, but not in the muon
+         // catcher, which is a better approximation to the current MC
+         // geometry and plausible from visual inspection of the real
+         // muon catcher.
+         + (plane < first_mucatcher)*celldown*pixy/2
 
          - (xview?screenyoffset_xview:screenyoffset_yview);
 }
