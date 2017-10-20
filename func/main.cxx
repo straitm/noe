@@ -112,12 +112,15 @@ static bool visible_hit(const int32_t tdc)
 // oldactive_plane/cell, and highlight the new one.  Do this instead of a full
 // redraw of edarea, which is expensive and causes very noticeable lag for the
 // FD.
-static void change_highlighted_cell(GtkWidget * widg,
-                                    const int oldactive_plane,
+static void change_highlighted_cell(const int oldactive_plane,
                                     const int oldactive_cell)
 {
-  cairo_t * cr = gdk_cairo_create(widg->window);
-  cairo_set_line_width(cr, 1.0);
+  cairo_t * cr[kXorY];
+  for(int i = 0; i < kXorY; i++){
+    cr[i] = gdk_cairo_create(edarea[i]->window);
+    cairo_set_line_width(cr[i], 1.0);
+  }
+
   std::vector<hit> & THEhits = theevents[gevi].hits;
 
   // We may need to find any number of hits since more than one hit
@@ -127,14 +130,14 @@ static void change_highlighted_cell(GtkWidget * widg,
     hit & thishit = THEhits[i];
     if((thishit.plane == oldactive_plane && thishit.cell == oldactive_cell) ||
        (thishit.plane ==    active_plane && thishit.cell ==    active_cell))
-      draw_hit(cr, thishit, edarea);
+      draw_hit(cr[thishit.plane%2 == 1?kX:kY], thishit, edarea);
   }
 
   // NOTE: In principle we should redraw tracks here since we may have just
   // stomped on some.  However, in practice the visual effect isn't very
   // noticeable and since it's kinda a pain to do it from here, we'll skip it.
 
-  cairo_destroy(cr);
+  for(int i = 0; i < kXorY; i++) cairo_destroy(cr[i]);
 }
 
 // Given a screen position, returns the cell number.  If no hit cell is in this
@@ -416,7 +419,7 @@ static gboolean mouseover(GtkWidget * widg, GdkEventMotion * gevent,
   active_plane = screen_to_plane     (V, (int)gevent->x);
   active_cell  = screen_to_activecell(V, (int)gevent->x, (int)gevent->y);
 
-  change_highlighted_cell(widg, oldactive_plane, oldactive_cell);
+  change_highlighted_cell(oldactive_plane, oldactive_cell);
   set_eventn_status2();
 
   return TRUE;
