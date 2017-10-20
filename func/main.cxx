@@ -30,7 +30,7 @@ TODO:
 
 * Animate by TNS times instead of TDC.  Be able to switch between?
 
-* Adapt to the window size intelligently.
+* Show slices somehow.
 
 */
 
