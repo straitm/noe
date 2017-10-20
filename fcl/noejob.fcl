@@ -9,6 +9,8 @@ services:
   # For tracks
   Geometry: @local::standard_geo
   Detector: @local::standard_detector
+  # Suppress "Begin processing the nth record" messages
+  message: { destinations: { debugmsg:{ threshold: "WARNING"} } }
 }
 
 physics:
