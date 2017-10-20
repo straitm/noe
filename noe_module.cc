@@ -253,7 +253,7 @@ void noe::produce(art::Event& evt)
   art::Handle< vector<rb::CellHit> > cellhits;
 
   if(!evt.getByLabel("calhit", cellhits)){
-    fprintf(stderr, "NOE needs a file with calhits in it.\n");
+    fprintf(stderr, "NOE needs CellHits with label \"calhit\".\n");
     _exit(0);
   }
 
@@ -307,9 +307,9 @@ void noe::produce(art::Event& evt)
     }
     for(unsigned int p = 0; p < (*tracks)[i].NTrajectoryPoints(); p++){
       const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
-        const std::pair<trackpoint, trackpoint> tps = cart_to_cp(*geo, tp);
-        thetrack.trajx.push_back(tps.first);
-        thetrack.trajy.push_back(tps.second);
+      const std::pair<trackpoint, trackpoint> tps = cart_to_cp(*geo, tp);
+      thetrack.trajx.push_back(tps.first);
+      thetrack.trajy.push_back(tps.second);
     }
     ev.addtrack(thetrack);
   }
