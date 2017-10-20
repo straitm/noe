@@ -206,7 +206,9 @@ int screen_to_cell_unbounded(const noe_view_t view, const int x, const int y)
   const int unoffsety = y + (view == kX?screenyoffset_xview:screenyoffset_yview);
 
   const int plane = screen_to_plane(view, x);
-  const bool celldown = !((plane/2)%2 ^ (plane%2));
+
+  // See comments in det_to_screen_y() on the muon catcher.
+  const bool celldown = (plane < first_mucatcher) * !((plane/2)%2 ^ (plane%2));
   const int effy = unoffsety - celldown*(pixy/2) - 2;
 
   return ncells_perplane - effy/pixy - 1;
