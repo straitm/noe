@@ -74,8 +74,14 @@ gboolean dozooming(GtkWidget * widg, GdkEventScroll * gevent, gpointer data)
 
   const int old_pixy = pixy, old_pixx = pixx;
 
-  if(up) pixy++;
-  else   pixy = std::max(isfd?FDpixy:NDpixy, pixy-1);
+  if(up){
+    if(pixy > 10) pixy *= 1.1;
+    else pixy++;
+  }
+  else{
+    if(pixy > 10) pixy = std::max(isfd?FDpixy:NDpixy, int(pixy*0.9));
+    else          pixy = std::max(isfd?FDpixy:NDpixy, pixy-1);
+  }
 
   if(old_pixy == pixy) return TRUE;
 
