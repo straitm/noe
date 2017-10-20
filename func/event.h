@@ -18,8 +18,7 @@ struct trackpoint{
 
 struct track{
   std::vector<hit> hits;
-  std::vector<trackpoint> trajx;
-  std::vector<trackpoint> trajy;
+  std::vector<trackpoint> traj[2 /* x and y */];
 };
 
 struct noeevent{

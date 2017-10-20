@@ -310,8 +310,8 @@ void noe::produce(art::Event& evt)
     for(unsigned int p = 0; p < (*tracks)[i].NTrajectoryPoints(); p++){
       const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
       const std::pair<trackpoint, trackpoint> tps = cart_to_cp(*geo, tp);
-      thetrack.trajx.push_back(tps.first);
-      thetrack.trajy.push_back(tps.second);
+      thetrack.traj[geo::kX].push_back(tps.first);
+      thetrack.traj[geo::kY].push_back(tps.second);
     }
     ev.addtrack(thetrack);
   }

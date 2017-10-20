@@ -1,8 +1,8 @@
 #include <gtk/gtk.h>
 #include <stdint.h>
 #include <vector>
-#include "event.h"
 #include "geo.h"
+#include "event.h"
 #include "drawing.h"
 #include "zoompan.h"
 

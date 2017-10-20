@@ -40,8 +40,9 @@ TODO:
 #include <algorithm>
 #include <string.h>
 #include "drawing.h"
-#include "event.h"
+#include "absgeo.h"
 #include "geo.h"
+#include "event.h"
 #include "tracks.h"
 #include "hits.h"
 #include "status.h"
@@ -59,7 +60,11 @@ static int TDCSTEP = 4;
 extern std::vector<noeevent> theevents;
 int gevi = 0;
 
-int active_plane = -1, active_cell = -1;
+// The positions of all the track points on the screen.
+// Uhmph.  Array of vector of vector of pairs of ints?  That's not good.
+std::vector< std::vector< std::pair<int, int> > > screentracks[kXorY];
+
+int active_plane = -1, active_cell = -1, active_track = -1;
 
 extern int first_mucatcher, ncells_perplane;
 extern int nplanes;
@@ -108,6 +113,20 @@ static bool visible_hit(const int32_t tdc)
          tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
 }
 
+// Unhighlight the track that is no longer being moused over (if any)
+// and highlight the new one (if any).
+static void change_highlighted_track(const int oldactive_track)
+{
+  if(oldactive_track == active_track) return;
+  // Currently very blunt. Maybe this is good enough. You can't just
+  // overdraw a track because it doesn't light up precise rows of
+  // pixels. The way Cairo works, you end up with a thicker track with
+  // bits of both colors in it. So to be less blunt, we'd have to redraw
+  // the region the track was in, and I haven't implemented anything
+  // like that.
+  redraw_event(NULL, NULL, NULL);
+}
+
 // Unhighlight the cell that is no longer being moused over, indicated by
 // oldactive_plane/cell, and highlight the new one.  Do this instead of a full
 // redraw of edarea, which is expensive and causes very noticeable lag for the
@@ -138,6 +157,28 @@ static void change_highlighted_cell(const int oldactive_plane,
   // noticeable and since it's kinda a pain to do it from here, we'll skip it.
 
   for(int i = 0; i < kXorY; i++) cairo_destroy(cr[i]);
+}
+
+// Given a screen position, return the closest track.  Preferably the
+// definition of "closest" matches what a user would expect.  If the
+// position is nowhere near a track, can return -1.  If there are no
+// tracks, returns -1.
+static int screen_to_activetrack(noe_view_t view, const int x, const int y)
+{
+  if(theevents[gevi].tracks.empty()) return -1;
+
+  int closesti = -1;
+  float mindist = FLT_MAX;
+  for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
+    const float dist = screen_dist_to_track(x, y, screentracks[view][i]);
+    if(dist < mindist){
+      mindist = dist;
+      closesti = i;
+    }
+  }
+
+  if(mindist < 20) return closesti;
+  return -1;
 }
 
 // Given a screen position, returns the cell number.  If no hit cell is in this
@@ -415,11 +456,14 @@ static gboolean mouseover(GtkWidget * widg, GdkEventMotion * gevent,
 
   const int oldactive_plane = active_plane;
   const int oldactive_cell  = active_cell;
+  const int oldactive_track = active_track;
 
   active_plane = screen_to_plane     (V, (int)gevent->x);
   active_cell  = screen_to_activecell(V, (int)gevent->x, (int)gevent->y);
+  active_track = screen_to_activetrack(V, (int)gevent->x, (int)gevent->y);
 
   change_highlighted_cell(oldactive_plane, oldactive_cell);
+  change_highlighted_track(oldactive_track);
   set_eventn_status2();
 
   return TRUE;
