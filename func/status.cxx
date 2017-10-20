@@ -41,12 +41,12 @@ void set_status(const int boxn, const char * format, ...)
 void set_eventn_status0()
 {
   if(theevents.empty()){
-    set_status(0, "No events in file");
+    set_status(0, "No events");
     return;
   }
 
   set_status(0, "Run %'d, subrun %d, event %'d "
-                "(%'d/%'d in the file, %.0f%% loaded)",
+                "(%'d/%'d in the file(s), %.0f%% loaded)",
     theevents[gevi].nrun, theevents[gevi].nsubrun,
     theevents[gevi].nevent, gevi+1,
     (int)theevents.capacity(), 100*float(theevents.size())/theevents.capacity());

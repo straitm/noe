@@ -53,11 +53,13 @@ void noe::respondToOpenInputFile(art::FileBlock const &fb)
   // but EDProducer::respondToOpenInputFile is totally undocumented as
   // far as I can see.
   //
-  // Also, supposedly one can open more than one file in a job.
-  //
   // Anyway, if this is the wrong number, it just means that the status
   // display will be wrong about what fraction of the file is loaded.
-  theevents.reserve(fb.tree()->GetEntries());
+  //
+  // If the job has more than one file, we don't know that until the
+  // second one triggers this function. This means the user is going to
+  // be disappointed when the percent-loaded is rewound. Oh well.
+  theevents.reserve(theevents.capacity() + fb.tree()->GetEntries());
 }
 
 void noe::endJob()
