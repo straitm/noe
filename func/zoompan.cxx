@@ -52,18 +52,20 @@ static bool zoomed()
   return (isfd && pixx != FDpixx) || (!isfd && pixx != NDpixx);
 }
 
-// XXX handle what happens to the other view better. I think it zooms
-// centered on the view in x, but centered on the top of the detector in y?
-gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
-                   GdkEventScroll * gevent, gpointer data)
+gboolean dozooming(GtkWidget * widg, GdkEventScroll * gevent, gpointer data)
 {
   const bool up = gevent->direction == GDK_SCROLL_UP;
 
   const noe_view_t V = (*(bool *)data)?kY:kX;
-  int * yoffset = V == kX?&screenyoffset_xview:&screenyoffset_yview;
+  int * yoffset       = V == kX?&screenyoffset_xview:&screenyoffset_yview;
+  int * other_yoffset = V == kY?&screenyoffset_xview:&screenyoffset_yview;
   const int plane = screen_to_plane_unbounded(V, (int)gevent->x);
   const int cell  = screen_to_cell_unbounded (V, (int)gevent->x, (int)gevent->y);
 
+  // In the view *not* being moused-over, zoom in y around the center of the
+  // view.  This assumes the two views have the same size on the screen.
+  const int other_cell = screen_to_cell_unbounded(V==kX?kY:kX,
+                                     (int)gevent->x, widg->allocation.height/2);
   const int old_pixy = pixy;
 
   if(up) pixy++;
@@ -81,6 +83,9 @@ gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
 
   const int newtotop = det_to_screen_y(plane, cell) + pixy/2;
   *yoffset += newtotop - (int)gevent->y;
+
+  const int other_newtotop = det_to_screen_y(plane+1, other_cell) + pixy/2;
+  *other_yoffset += other_newtotop - widg->allocation.height/2;
 
   // If we're back at the unzoomed view, clear offsets, even though this
   // violates the "don't move the hit under the mouse pointer" rule.
