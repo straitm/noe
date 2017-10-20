@@ -89,6 +89,7 @@ void draw_hit(cairo_t * cr, const hit & thishit, GtkWidget ** edarea)
   // draw all the way across to the next plane in the view to be easier
   // to look at.  If cells are visually large, make them closer to the
   // actual size of the scintillator.
+  // XXX how about a yexpand to show the scintillator size in y?
   const bool xexpand = pixx <= 3;
   const int epixx = xexpand?pixx:scintpix_from_pixx(pixx);
 

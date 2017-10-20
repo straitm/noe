@@ -52,6 +52,8 @@ static bool zoomed()
   return (isfd && pixx != FDpixx) || (!isfd && pixx != NDpixx);
 }
 
+// XXX handle what happens to the other view better. I think it zooms
+// centered on the view in x, but centered on the top of the detector in y?
 gboolean dozooming(__attribute__((unused)) GtkWidget * widg,
                    GdkEventScroll * gevent, gpointer data)
 {

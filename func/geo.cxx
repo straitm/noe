@@ -111,6 +111,7 @@ int det_to_screen_x(const int plane)
       - screenxoffset;
 }
 
+// XXX put in the extra space between extrusions.
 int det_to_screen_y(const int plane, const int cell)
 {
   const bool xview = plane%2 == 1;
