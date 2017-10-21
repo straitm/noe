@@ -72,10 +72,11 @@ extern int nplanes;
 /* GTK objects owned elsewhere */
 extern GtkWidget * statbox[NSTATBOXES];
 extern GtkTextBuffer * stattext[NSTATBOXES];
+extern GtkWidget * edarea[kXorY];
+extern cairo_pattern_t * eventpattern[kXorY];
 
 /* GTK objects owned here */
 static GtkWidget * win = NULL;
-extern GtkWidget * edarea[2]; // X and Y views
 static GtkWidget * animate_checkbox = NULL,
                  * cum_ani_checkbox = NULL,
                  * freerun_checkbox = NULL;
@@ -118,13 +119,28 @@ static bool visible_hit(const int32_t tdc)
 static void change_highlighted_track(const int oldactive_track)
 {
   if(oldactive_track == active_track) return;
-  // Currently very blunt. Maybe this is good enough. You can't just
-  // overdraw a track because it doesn't light up precise rows of
-  // pixels. The way Cairo works, you end up with a thicker track with
-  // bits of both colors in it. So to be less blunt, we'd have to redraw
-  // the region the track was in, and I haven't implemented anything
-  // like that.
-  redraw_event(NULL, NULL, NULL);
+
+  // You can't just overdraw a track because it doesn't light up precise
+  // rows of pixels. The way Cairo works, you end up with a thicker
+  // track with bits of both colors in it.
+  cairo_t * cr[kXorY];
+  for(int i = 0; i < kXorY; i++){
+    cairo_push_group(cr[i] = gdk_cairo_create(edarea[i]->window));
+    cairo_set_source(cr[i], eventpattern[i]);
+    cairo_paint(cr[i]);
+  }
+
+  DRAWPARS drawpars;
+  drawpars.firsttick = theevents[gevi].current_mintick;
+  drawpars.lasttick  = theevents[gevi].current_maxtick;
+  drawpars.clear = false;
+  draw_tracks(cr, &drawpars);
+
+  for(int i = 0; i < kXorY; i++){
+    cairo_pop_group_to_source(cr[i]);
+    cairo_paint(cr[i]);
+    cairo_destroy(cr[i]);
+  }
 }
 
 // Unhighlight the cell that is no longer being moused over, indicated by
@@ -462,8 +478,10 @@ static gboolean mouseover(GtkWidget * widg, GdkEventMotion * gevent,
   active_cell  = screen_to_activecell(V, (int)gevent->x, (int)gevent->y);
   active_track = screen_to_activetrack(V, (int)gevent->x, (int)gevent->y);
 
-  change_highlighted_cell(oldactive_plane, oldactive_cell);
+  // Change track first because it starts by redrawing all hits from a saved
+  // cairo_pattern_t.
   change_highlighted_track(oldactive_track);
+  change_highlighted_cell(oldactive_plane, oldactive_cell);
   set_eventn_status2();
 
   return TRUE;

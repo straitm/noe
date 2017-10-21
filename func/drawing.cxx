@@ -15,7 +15,9 @@ extern rect screenview[kXorY], screenmu;
 extern int first_mucatcher;
 extern int nplanes;
 
-GtkWidget * edarea[2] = { NULL }; // X and Y views
+
+GtkWidget * edarea[kXorY] = { NULL }; // X and Y views
+cairo_pattern_t * eventpattern[kXorY] = { NULL };
 
 // Blank the drawing area and draw the detector bounding boxes
 static void draw_background(cairo_t ** cr)
@@ -72,10 +74,22 @@ void draw_event(const DRAWPARS * const drawpars)
   if(drawpars->clear) draw_background(cr);
 
   draw_hits(cr, drawpars, edarea);
-  draw_tracks(cr, drawpars);
 
   set_eventn_status(); // overwrite anything that draw_hits did
 
+  // Draw and save the state with hits but not tracks so that we can easily
+  // redraw with differently highlighted tracks later
+  for(int i = 0; i < kXorY; i++){
+    if(eventpattern[i] != NULL) cairo_pattern_destroy(eventpattern[i]);
+    eventpattern[i] = cairo_pop_group(cr[i]);
+    cairo_set_source(cr[i], eventpattern[i]);
+    cairo_paint(cr[i]);
+    cairo_destroy(cr[i]);
+  }
+
+  for(int i = 0; i < kXorY; i++)
+    cairo_push_group(cr[i] = gdk_cairo_create(edarea[i]->window));
+  draw_tracks(cr, drawpars);
   for(int i = 0; i < kXorY; i++){
     cairo_pop_group_to_source(cr[i]);
     cairo_paint(cr[i]);
