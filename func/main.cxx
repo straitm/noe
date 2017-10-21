@@ -368,7 +368,7 @@ static gboolean prefetch_an_event(__attribute__((unused)) gpointer data)
 // Why are you always preparing?  You're always preparing! Just go!
 static void prepare_to_swich_events()
 {
-  active_cell = active_plane = -1;
+  active_track = active_cell = active_plane = -1;
 }
 
 // Display the next or previous event.

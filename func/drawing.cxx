@@ -82,14 +82,13 @@ void draw_event(const DRAWPARS * const drawpars)
   for(int i = 0; i < kXorY; i++){
     if(eventpattern[i] != NULL) cairo_pattern_destroy(eventpattern[i]);
     eventpattern[i] = cairo_pop_group(cr[i]);
+    cairo_push_group(cr[i]);
     cairo_set_source(cr[i], eventpattern[i]);
     cairo_paint(cr[i]);
-    cairo_destroy(cr[i]);
   }
 
-  for(int i = 0; i < kXorY; i++)
-    cairo_push_group(cr[i] = gdk_cairo_create(edarea[i]->window));
   draw_tracks(cr, drawpars);
+
   for(int i = 0; i < kXorY; i++){
     cairo_pop_group_to_source(cr[i]);
     cairo_paint(cr[i]);
