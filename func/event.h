@@ -17,6 +17,9 @@ struct trackpoint{
 };
 
 struct track{
+  // integer mm to save a little memory
+  short startx, starty, startz, stopx, stopy, stopz;
+
   std::vector<hit> hits;
   std::vector<trackpoint> traj[2 /* x and y */];
 };

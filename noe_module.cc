@@ -301,6 +301,12 @@ void noe::produce(art::Event& evt)
 
   for(unsigned int i = 0; tracks.isValid() && i < tracks->size(); i++){
     track thetrack;
+    thetrack.startx = 10*(*tracks)[i].Start().X();
+    thetrack.starty = 10*(*tracks)[i].Start().Y();
+    thetrack.startz = 10*(*tracks)[i].Start().Z();
+    thetrack.stopx  = 10*(*tracks)[i].Stop ().X();
+    thetrack.stopy  = 10*(*tracks)[i].Stop ().Y();
+    thetrack.stopz  = 10*(*tracks)[i].Stop ().Z();
     for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
       hit thehit;
       thehit.cell = (*tracks)[i].Cell(c)->Cell();

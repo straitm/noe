@@ -13,7 +13,7 @@ GtkWidget * statbox[NSTATBOXES];
 
 extern std::vector<noeevent> theevents;
 extern int gevi;
-extern int active_plane, active_cell;
+extern int active_plane, active_cell, active_track;
 
 extern bool ghave_read_all;
 
@@ -118,6 +118,28 @@ void set_eventn_status2()
   set_status(2, status2);
 }
 
+// TODO: make this a pop-up window (or similar) with more detailed information
+void set_eventn_status3()
+{
+  if(active_track < 0 && !theevents[gevi].tracks.empty()){
+    set_status(3, "Mouse over a track for more information");
+    return;
+  }
+
+  char status[MAXSTATUS];
+  int pos = snprintf(status, MAXSTATUS, "Track %d: ", active_track);
+  pos += snprintf(status+pos, MAXSTATUS-pos, "start (%.1f, %.1f, %.1f), "
+                                             "stop (%.1f, %.1f, %.1f)",
+    theevents[gevi].tracks[active_track].startx/10.,
+    theevents[gevi].tracks[active_track].starty/10.,
+    theevents[gevi].tracks[active_track].startz/10.,
+    theevents[gevi].tracks[active_track].stopx/10.,
+    theevents[gevi].tracks[active_track].stopy/10.,
+    theevents[gevi].tracks[active_track].stopz/10.);
+
+  set_status(3, status);
+}
+
 void set_eventn_status2progress(const int nhit, const int tothits)
 {
   set_status(2, "Processing big event, %d/%d hits", nhit, tothits);
@@ -131,5 +153,5 @@ void set_eventn_status()
 
   set_eventn_status1();
   set_eventn_status2();
+  set_eventn_status3();
 }
-
