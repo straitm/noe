@@ -57,8 +57,13 @@ __attribute__((unused)) const DRAWPARS * const drawpars)
   for(int V = 0; V < kXorY; V++){
     screentracks[V].clear();
     for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++)
-      screentracks[V].push_back(
-        draw_track_in_one_view(cr[V], theevents[gevi].tracks[i].traj[V],
-                               (int)i == active_track));
+      if((int)i != active_track)
+        screentracks[V].push_back(draw_track_in_one_view(
+          cr[V], theevents[gevi].tracks[i].traj[V], false));
+
+    // Draw the active track last so it is on top
+    if(active_track >= 0)
+      screentracks[V].push_back(draw_track_in_one_view(
+        cr[V], theevents[gevi].tracks[active_track].traj[V], true));
   }
 }
