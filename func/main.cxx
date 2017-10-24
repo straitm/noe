@@ -1,7 +1,6 @@
 /*
 Main file for NOE, the New nOva Event display. This isn't the entry
-point (see comments at realmain()), but is where nearly everything
-happens.
+point (see comments at realmain()), but is where most things happen.
 
 Author: Matthew Strait
 Begun: Sept 2017
@@ -30,7 +29,9 @@ TODO:
 
 * Animate by TNS times instead of TDC.  Be able to switch between?
 
-* Show slices somehow.
+* Show slices somehow. Probably will implement by having a way to show
+any kind of rb::Clusters, specified in the fcl, and defaulting to the
+standard slicer.
 
 */
 

@@ -126,6 +126,8 @@ void set_eventn_status3()
     return;
   }
 
+  if(theevents[gevi].tracks.empty()) return;
+
   char status[MAXSTATUS];
   int pos = snprintf(status, MAXSTATUS, "Track %d: ", active_track);
   pos += snprintf(status+pos, MAXSTATUS-pos, "start (%.1f, %.1f, %.1f), "

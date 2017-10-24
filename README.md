@@ -16,7 +16,7 @@ the existing event display. The primary goals are to:
 
 * Allow visualizing events in new (useful) ways, including animations.
 
-* Give easy access to detailed hit and reconstructed (TODO) object
+* Give easy access to detailed hit and reconstructed object
   information for displayed objects.
 
 A non-exhaustive list of things that are not priorities:
@@ -25,18 +25,15 @@ A non-exhaustive list of things that are not priorities:
 
 * Display of Monte Carlo information.
 
-* Have the ability to resize the display.
-
 * Be highly customizable, e.g. have user-adjustable colors.
-
-* Have automatic availability of new types of reconstructed objects. 
-  Most likely only a fixed list of the most commonly used objects will
-  be available.
 
 # Compiling it
 
-Check out this repository into a test release (so that you end up
-with .../test-release/noe/), and then build the test release as usual.
+If you got this via git, check out this repository into a test release
+(so that you end up with .../test-release/noe/), and then build the test
+release as usual.
+
+If you got this via SRT, it's the same as any other package.
 
 # Running it
 
