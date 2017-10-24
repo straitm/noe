@@ -59,6 +59,14 @@ void noe::respondToOpenInputFile(art::FileBlock const &fb)
   // If the job has more than one file, we don't know that until the
   // second one triggers this function. This means the user is going to
   // be disappointed when the percent-loaded is rewound. Oh well.
+  //
+  // If the user gave -n on the command line to limit the number of
+  // events, we don't pick that up either, so the status bar will just
+  // stop increasing when we stop reading without reaching 100%. Chris
+  // Backhouse says "you can introspect what the fcl configuration
+  // was for other modules in the path (see CAFMaker for an example
+  // of trying to dig out genie settings) so maybe you can get at the
+  // InputSource config (which is where that value goes)". So TODO.
   theevents.reserve(theevents.capacity() + fb.tree()->GetEntries());
 }
 
