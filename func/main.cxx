@@ -27,6 +27,10 @@ Code style:
 
 TODO:
 
+* Ticky box for enabling/disabling tracks on the fly.
+
+* Use time of tracks for animations.
+
 * Animate by TNS times instead of TDC.  Be able to switch between?
 
 * Show slices somehow. Probably will implement by having a way to show
