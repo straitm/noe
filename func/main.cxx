@@ -27,6 +27,10 @@ Code style:
 
 TODO:
 
+* Ticky box for enabling/disabling tracks on the fly.
+
+* Use time of tracks for animations.
+
 * Animate by TNS times instead of TDC.  Be able to switch between?
 
 * Show slices somehow. Probably will implement by having a way to show
@@ -180,13 +184,15 @@ static void change_highlighted_cell(const int oldactive_plane,
 // definition of "closest" matches what a user would expect.  If the
 // position is nowhere near a track, can return -1.  If there are no
 // tracks, returns -1.
-static int screen_to_activetrack(noe_view_t view, const int x, const int y)
+static int screen_to_activetrack(const noe_view_t view,
+                                 const int x, const int y)
 {
   if(theevents[gevi].tracks.empty()) return -1;
 
   int closesti = -1;
   float mindist = FLT_MAX;
-  for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
+  for(unsigned int i = 0; i < theevents[gevi].tracks.size() &&
+                          i < screentracks[view].size(); i++){
     const float dist = screen_dist_to_track(x, y, screentracks[view][i]);
     if(dist < mindist){
       mindist = dist;
@@ -227,6 +233,60 @@ static int screen_to_activecell(noe_view_t view, const int x, const int y)
   return closestcell;
 }
 
+static void update_active_objects(const noe_view_t V, const int x, const int y)
+{
+  const int oldactive_plane = active_plane;
+  const int oldactive_cell  = active_cell;
+  const int oldactive_track = active_track;
+
+  active_plane = screen_to_plane      (V, x);
+  active_cell  = screen_to_activecell (V, x, y);
+  active_track = screen_to_activetrack(V, x, y);
+
+  // Change track first because it starts by redrawing all hits from a saved
+  // cairo_pattern_t.
+  change_highlighted_track(oldactive_track);
+  change_highlighted_cell(oldactive_plane, oldactive_cell);
+  set_eventn_status2();
+  set_eventn_status3();
+}
+
+// To be called periodically and when events are changed to get the
+// mouse pointer position and highlight objects accordingly without the
+// user having to jiggle the mouse to generate a motion-notify-event.
+static gboolean pollmouseover(__attribute__((unused)) gpointer data)
+{
+  gint x, y;
+  for(int i = 0; i < kXorY; i++){
+    gtk_widget_get_pointer(edarea[i], &x, &y);
+    if(x >= 0 && y >= 0 && x < edarea[i]->allocation.width
+                        && y < edarea[i]->allocation.height)
+      update_active_objects((noe_view_t)i, x, y);
+  }
+  return TRUE;
+}
+
+// Handle the mouse arriving at a spot in the drawing area. Find what cell the
+// user is pointing at, highlight it, and show information about it. Or
+// if the left button is down, pan instead.
+static gboolean mouseover(GtkWidget * widg, GdkEventMotion * gevent,
+                          __attribute__((unused)) gpointer data)
+{
+  if(gevent == NULL) return TRUE; // shouldn't happen
+  if(theevents.empty()) return TRUE; // No coordinates in this case
+
+  const noe_view_t V = widg == edarea[kX]? kX: kY;
+
+  if(gevent->state & GDK_BUTTON1_MASK){
+    dopanning(V, gevent);
+    return TRUE;
+  }
+
+  update_active_objects(V, (int)gevent->x, (int)gevent->y);
+
+  return TRUE;
+}
+
 // draw_event and to_next_free_run circularly refer to each other...
 static gboolean to_next_free_run(__attribute__((unused)) gpointer data);
 
@@ -240,6 +300,10 @@ static void draw_whole_user_event()
   drawpars.lasttick  = theevents[gevi].current_maxtick;
   drawpars.clear = true;
   draw_event(&drawpars);
+
+  // get cells, etc. highlighted a little faster.  For tracks, must call
+  // this *after* draw_event so that screentrack is filled.
+  pollmouseover(NULL);
 }
 
 static gboolean animation_step(__attribute__((unused)) gpointer data)
@@ -272,6 +336,10 @@ static gboolean animation_step(__attribute__((unused)) gpointer data)
   // by the return value of to_next_free_run().
   if(!stillanimating && free_running)
     return to_next_free_run(NULL);
+
+  // Immediately zero this so that other functions can know that the
+  // animation isn't active.
+  if(!stillanimating) animatetimeoutid = 0;
 
   return stillanimating;
 }
@@ -456,39 +524,6 @@ static void getuserevent()
   handle_event();
 }
 
-// Handle the mouse arriving at a spot in the drawing area. Find what cell the
-// user is pointing at, highlight it, and show information about it.
-static gboolean mouseover(GtkWidget * widg, GdkEventMotion * gevent,
-                          __attribute__((unused)) gpointer data)
-{
-  if(gevent == NULL) return TRUE; // shouldn't happen
-  if(theevents.empty()) return TRUE; // No coordinates in this case
-
-  const noe_view_t V = widg == edarea[kX]? kX: kY;
-
-  if(gevent->state & GDK_BUTTON1_MASK){
-    dopanning(V, gevent);
-    return TRUE;
-  }
-
-  const int oldactive_plane = active_plane;
-  const int oldactive_cell  = active_cell;
-  const int oldactive_track = active_track;
-
-  active_plane = screen_to_plane     (V, (int)gevent->x);
-  active_cell  = screen_to_activecell(V, (int)gevent->x, (int)gevent->y);
-  active_track = screen_to_activetrack(V, (int)gevent->x, (int)gevent->y);
-
-  // Change track first because it starts by redrawing all hits from a saved
-  // cairo_pattern_t.
-  change_highlighted_track(oldactive_track);
-  change_highlighted_cell(oldactive_plane, oldactive_cell);
-  set_eventn_status2();
-  set_eventn_status3();
-
-  return TRUE;
-}
-
 static void stop_freerun_timer()
 {
   if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
@@ -616,14 +651,17 @@ static void adjusttick(GtkWidget * wg, const gpointer dt)
 
   noeevent & E = theevents[gevi];
 
-  (dt != NULL && *(bool *)dt? E.user_maxtick: E.user_mintick)
+  const bool adjmax = *(bool *)dt;
+
+  // TODO: respond intelligently if the user gives a maximum less
+  // than the minimum.  Currently does something dumb.
+
+  (adjmax? E.user_maxtick: E.user_mintick)
     = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
 
   const int32_t oldcurrent_maxtick = E.current_maxtick;
   const int32_t oldcurrent_mintick = E.current_mintick;
   if(animate){
-    // TODO: more elegantly handle the case that animation is on, but
-    // the animation has completed.
     E.current_maxtick = std::min(E.current_maxtick, E.user_maxtick);
     E.current_mintick = std::max(E.current_mintick, E.user_mintick);
   }
@@ -639,7 +677,16 @@ static void adjusttick(GtkWidget * wg, const gpointer dt)
   // TODO can optimize this to only draw the new range
   drawpars.firsttick = E.current_mintick;
   drawpars.lasttick  = E.current_maxtick;
-  draw_event(&drawpars);
+
+  // Restart the animation if the minimum has changed, OR if the maximum
+  // has changed but we've finished animating, OR if the maximum has
+  // changed and is now less than where we were. TODO: This could be
+  // better.
+  if(animate && (!adjmax || animatetimeoutid == 0 ||
+                 oldcurrent_maxtick < E.current_maxtick))
+    restart_animation(NULL, NULL);
+  else
+    draw_event(&drawpars);
 }
 
 // Respond to changes in the spin button for animation/free running speed
@@ -882,6 +929,8 @@ static void setup()
   gtk_widget_queue_draw(win);
 
   if(!ghave_read_all) g_timeout_add(20, prefetch_an_event, NULL);
+
+  g_timeout_add(500, pollmouseover, NULL);
 }
 
 /*********************************************************************/
