@@ -273,6 +273,10 @@ static gboolean animation_step(__attribute__((unused)) gpointer data)
   if(!stillanimating && free_running)
     return to_next_free_run(NULL);
 
+  // Immediately zero this so that other functions can know that the
+  // animation isn't active.
+  if(!stillanimating) animatetimeoutid = 0;
+
   return stillanimating;
 }
 
@@ -616,14 +620,17 @@ static void adjusttick(GtkWidget * wg, const gpointer dt)
 
   noeevent & E = theevents[gevi];
 
-  (dt != NULL && *(bool *)dt? E.user_maxtick: E.user_mintick)
+  const bool adjmax = *(bool *)dt;
+
+  // TODO: respond intelligently if the user gives a maximum less
+  // than the minimum.  Currently does something dumb.
+
+  (adjmax? E.user_maxtick: E.user_mintick)
     = gtk_adjustment_get_value(GTK_ADJUSTMENT(wg));
 
   const int32_t oldcurrent_maxtick = E.current_maxtick;
   const int32_t oldcurrent_mintick = E.current_mintick;
   if(animate){
-    // TODO: more elegantly handle the case that animation is on, but
-    // the animation has completed.
     E.current_maxtick = std::min(E.current_maxtick, E.user_maxtick);
     E.current_mintick = std::max(E.current_mintick, E.user_mintick);
   }
@@ -639,7 +646,16 @@ static void adjusttick(GtkWidget * wg, const gpointer dt)
   // TODO can optimize this to only draw the new range
   drawpars.firsttick = E.current_mintick;
   drawpars.lasttick  = E.current_maxtick;
-  draw_event(&drawpars);
+
+  // Restart the animation if the minimum has changed, OR if the maximum
+  // has changed but we've finished animating, OR if the maximum has
+  // changed and is now less than where we were. TODO: This could be
+  // better.
+  if(animate && (!adjmax || animatetimeoutid == 0 ||
+                 oldcurrent_maxtick < E.current_maxtick))
+    restart_animation(NULL, NULL);
+  else
+    draw_event(&drawpars);
 }
 
 // Respond to changes in the spin button for animation/free running speed
