@@ -741,7 +741,7 @@ static GtkWidget * make_tickslider(const bool ismax)
 {
   const int initialticknum = 0;
   GtkObject * const tickadj = gtk_adjustment_new
-    (initialticknum, 0, 1000, 1, 10, 0);
+    (initialticknum, 0, 1000, 1, 100, 0);
   GtkWidget * tickslider = gtk_spin_button_new(GTK_ADJUSTMENT(tickadj), 10, 0);
   g_signal_connect(tickadj, "value_changed", G_CALLBACK(adjusttick),
                    new bool(ismax));
