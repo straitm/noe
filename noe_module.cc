@@ -14,6 +14,7 @@
 // For tracks
 #include "Geometry/Geometry.h"
 #include "RecoBase/Track.h"
+#include "RecoBase/Vertex.h"
 
 #include "func/main.h"
 #include "func/event.h"
@@ -33,14 +34,16 @@ class noe : public art::EDProducer {
   // Used to get the number of events in the file
   void respondToOpenInputFile(art::FileBlock const &fb);
 
-  // The art label for tracks that we are going to display, or the
-  // empty string to display no tracks.
+  // The art labels for tracks and vertices that we are going to display, or
+  // the empty string to display none.
   std::string fTrackLabel;
+  std::string fVertexLabel;
 };
 
 noe::noe(fhicl::ParameterSet const & pset)
 {
   fTrackLabel = pset.get< std::string >("track_label");
+  fVertexLabel= pset.get< std::string >("vertex_label");
 }
 
 noe::~noe() { }
@@ -268,18 +271,24 @@ void noe::produce(art::Event& evt)
   }
 
   art::Handle< vector<rb::Track> > tracks;
-  if(fTrackLabel != ""){
-    if(!evt.getByLabel(fTrackLabel, tracks)){
-      fprintf(stderr,
-        "Warning: No tracks found with label \"%s\"\n", fTrackLabel.c_str());
-      fTrackLabel = "";
-    }
+  if(fTrackLabel != "" && !evt.getByLabel(fTrackLabel, tracks)){
+    fprintf(stderr,
+      "Warning: No tracks found with label \"%s\"\n", fTrackLabel.c_str());
+    fTrackLabel = "";
   }
 
-  // Not needed for hits, just for tracks.  Aggressively don't load the
+  art::Handle< vector<rb::Vertex> > vertices;
+  if(fVertexLabel != "" && !evt.getByLabel(fVertexLabel, vertices)){
+    fprintf(stderr,
+      "Warning: No vertices found with label \"%s\"\n", fVertexLabel.c_str());
+    fVertexLabel = "";
+  }
+
+  // Not needed for hits, just for reco.  Aggressively don't load the
   // Geometry if it isn't needed.
   static art::ServiceHandle<geo::Geometry> * geo =
-    fTrackLabel == ""? NULL: new art::ServiceHandle<geo::Geometry>;
+    fVertexLabel == "" && fTrackLabel == ""? NULL:
+    new art::ServiceHandle<geo::Geometry>;
 
 #if 0
   if(theevents.empty()) add_test_nd_event();
@@ -315,6 +324,7 @@ void noe::produce(art::Event& evt)
     thetrack.stopx  = 10*(*tracks)[i].Stop ().X();
     thetrack.stopy  = 10*(*tracks)[i].Stop ().Y();
     thetrack.stopz  = 10*(*tracks)[i].Stop ().Z();
+    // TODO: make exact time available to the user.  For vertices, too.
     thetrack.time = (*tracks)[i].MeanTNS()/1000*64.; // translate to TDC
     for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
       hit thehit;
@@ -329,6 +339,15 @@ void noe::produce(art::Event& evt)
       thetrack.traj[geo::kY].push_back(tps.second);
     }
     ev.addtrack(thetrack);
+  }
+
+  for(unsigned int i = 0; i < vertices.isValid() && vertices->size(); i++){
+    vertex thevertex;
+    thevertex.x = (*vertices)[i].GetX();
+    thevertex.y = (*vertices)[i].GetY();
+    thevertex.z = (*vertices)[i].GetZ();
+    thevertex.t = (*vertices)[i].GetT()/1000*64; // translate to TDC
+    ev.addvertex(thevertex);
   }
 
   theevents.push_back(ev);

@@ -25,9 +25,14 @@ struct track{
   std::vector<trackpoint> traj[2 /* x and y */];
 };
 
+struct vertex{
+  float x, y, z, t;
+};
+
 struct noeevent{
   std::vector<hit> hits;
   std::vector<track> tracks;
+  std::vector<vertex> vertices;
   uint32_t nevent, nrun, nsubrun;
 
   // The first and last hits physically in the event
@@ -56,9 +61,14 @@ struct noeevent{
 
   bool fdlike = false;
 
-  void addtrack(__attribute__((unused)) const track & t)
+  void addtrack(const track & t)
   {
     tracks.push_back(t);
+  }
+
+  void addvertex(const vertex & v)
+  {
+    vertices.push_back(v);
   }
 
   void addhit(const hit & h)
