@@ -10,6 +10,7 @@ services:
 
 UUDDLRLRBAS: @local::standard_noe
 UUDDLRLRBAS.track_label: ""
+UUDDLRLRBAS.vertex_label: ""
 
 physics:
 {

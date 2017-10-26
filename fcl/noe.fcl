@@ -8,6 +8,10 @@ standard_noe:
   # this to another reconstruction, or can disable track display it by
   # specifying "" (the empty string).
   track_label: "breakpoint"
+
+  # As with tracks, this can be switched (although I'm not sure there
+  # are any alternatives) or disabled by setting to the empty string.
+  vertex_label: "elasticarmshs"
 }
 
 END_PROLOG

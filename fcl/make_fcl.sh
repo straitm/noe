@@ -27,9 +27,14 @@ doit()
   if [ "$type" != default ]; then
      echo "UUDDLRLRBAS: @local::standard_noe"
      if [ $type != "notracks" ]; then
-       label=kalmantrackmerge
+       trklabel=kalmantrackmerge
      fi
-     printf 'UUDDLRLRBAS.track_label: "'$label'"\n\n'
+     printf 'UUDDLRLRBAS.track_label: "'$trklabel'"\n'
+     if [ "$type" == "notracks" ]; then
+       printf 'UUDDLRLRBAS.vertex_label: "'$vtxlabel'"\n\n'
+     else
+       printf '\n'
+     fi
   fi
 
   echo "physics:"
