@@ -19,6 +19,7 @@ struct trackpoint{
 struct track{
   // integer mm to save a little memory
   short startx, starty, startz, stopx, stopy, stopz;
+  int32_t time; // mean time in TDC ticks
 
   std::vector<hit> hits;
   std::vector<trackpoint> traj[2 /* x and y */];

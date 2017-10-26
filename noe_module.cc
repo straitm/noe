@@ -315,6 +315,7 @@ void noe::produce(art::Event& evt)
     thetrack.stopx  = 10*(*tracks)[i].Stop ().X();
     thetrack.stopy  = 10*(*tracks)[i].Stop ().Y();
     thetrack.stopz  = 10*(*tracks)[i].Stop ().Z();
+    thetrack.time = (*tracks)[i].MeanTNS()/1000*64.; // translate to TDC
     for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
       hit thehit;
       thehit.cell = (*tracks)[i].Cell(c)->Cell();

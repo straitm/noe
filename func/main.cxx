@@ -66,8 +66,7 @@ extern std::vector<noeevent> theevents;
 int gevi = 0;
 
 // The positions of all the track points on the screen.
-// Uhmph.  Array of vector of vector of pairs of ints?  That's not good.
-std::vector< std::vector< std::pair<int, int> > > screentracks[kXorY];
+std::vector<screentrack_t> screentracks[kXorY];
 
 int active_plane = -1, active_cell = -1, active_track = -1;
 
@@ -191,12 +190,11 @@ static int screen_to_activetrack(const noe_view_t view,
 
   int closesti = -1;
   float mindist = FLT_MAX;
-  for(unsigned int i = 0; i < theevents[gevi].tracks.size() &&
-                          i < screentracks[view].size(); i++){
-    const float dist = screen_dist_to_track(x, y, screentracks[view][i]);
+  for(unsigned int i = 0; i < screentracks[view].size(); i++){
+    const float dist = screen_dist_to_track(x, y, screentracks[view][i].traj);
     if(dist < mindist){
       mindist = dist;
-      closesti = i;
+      closesti = screentracks[view][i].i; // index into the full track array
     }
   }
 

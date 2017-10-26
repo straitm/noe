@@ -4,9 +4,10 @@
 #include "geo.h"
 #include "event.h"
 #include "drawing.h"
+#include "tracks.h"
 
 extern std::vector<noeevent> theevents;
-extern std::vector< std::vector< std::pair<int, int> > > screentracks[kXorY];
+extern std::vector<screentrack_t> screentracks[kXorY];
 extern int gevi;
 extern int pixx, pixy;
 extern int active_track;
@@ -51,19 +52,31 @@ draw_track_in_one_view(cairo_t * cr,
   return screenpoints;
 }
 
-void draw_tracks(cairo_t ** cr,
-__attribute__((unused)) const DRAWPARS * const drawpars)
+void draw_tracks(cairo_t ** cr, const DRAWPARS * const drawpars)
 {
   for(int V = 0; V < kXorY; V++){
     screentracks[V].clear();
-    for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++)
-      if((int)i != active_track)
-        screentracks[V].push_back(draw_track_in_one_view(
-          cr[V], theevents[gevi].tracks[i].traj[V], false));
+
+    for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
+      track & tr = theevents[gevi].tracks[i];
+      if((int)i != active_track &&
+         tr.time >= drawpars->firsttick && tr.time <= drawpars->lasttick){
+        screentrack_t st;
+        st.traj = draw_track_in_one_view(cr[V], tr.traj[V], false);
+        st.i = i;
+        screentracks[V].push_back(st);
+      }
+    }
 
     // Draw the active track last so it is on top
-    if(active_track >= 0)
-      screentracks[V].push_back(draw_track_in_one_view(
-        cr[V], theevents[gevi].tracks[active_track].traj[V], true));
+    if(active_track >= 0){
+      track & tr = theevents[gevi].tracks[active_track];
+      if(tr.time >= drawpars->firsttick && tr.time <= drawpars->lasttick){
+        screentrack_t st;
+        st.traj = draw_track_in_one_view(cr[V], tr.traj[V], true);
+        st.i = active_track;
+        screentracks[V].push_back(st);
+      }
+    }
   }
 }
