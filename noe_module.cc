@@ -130,10 +130,10 @@ static vector< vector<float> > ycell_y;
 
 // Given a position in 3-space, return a plane and cell that is reasonably
 // close in the given view assuming a regular detector geometry.
-static trackpoint get_int_plane_and_cell(
+static cppoint get_int_plane_and_cell(
   const double x, const double y, const double z, const geo::View_t view)
 {
-  trackpoint ans;
+  cppoint ans;
 
   // (1) First the plane
   {
@@ -214,7 +214,7 @@ static void build_cell_lookup_table(art::ServiceHandle<geo::Geometry> & geo)
 // Given a Cartesian position, tp, representing a track point, return the
 // position in floating-point plane and cell number for both views where an
 // integer means the cell center.
-static std::pair<trackpoint, trackpoint> cart_to_cp(
+static std::pair<cppoint, cppoint> cart_to_cp(
   art::ServiceHandle<geo::Geometry> & geo, const TVector3 &tp)
 {
   // With this lookup table (which isn't really a lookup table), finding
@@ -228,7 +228,7 @@ static std::pair<trackpoint, trackpoint> cart_to_cp(
 
   // For each view, first find a plane and cell which is probably the closest
   // one, or maybe one of the several closest. Then ask the geometry where that
-  // cell is and store the difference in the fractional part of the trackpoint.
+  // cell is and store the difference in the fractional part of the cppoint.
   // This is right up to the difference between the mean plane and cell
   // spacings and the actual spacing near the requested point.  For purposes of
   // the event display, it's fine.
@@ -237,7 +237,7 @@ static std::pair<trackpoint, trackpoint> cart_to_cp(
   const double meanplanesep = 6.6681604;
   const double meancellsep  = 3.9674375;
 
-  std::pair<trackpoint, trackpoint> answer;
+  std::pair<cppoint, cppoint> answer;
   answer.first = get_int_plane_and_cell(tp.X(), tp.Y(), tp.Z(), geo::kX);
 
   double cellcenter[3], dum[3];
@@ -334,7 +334,7 @@ void noe::produce(art::Event& evt)
     }
     for(unsigned int p = 0; p < (*tracks)[i].NTrajectoryPoints(); p++){
       const TVector3 & tp = (*tracks)[i].TrajectoryPoint(p);
-      const std::pair<trackpoint, trackpoint> tps = cart_to_cp(*geo, tp);
+      const std::pair<cppoint, cppoint> tps = cart_to_cp(*geo, tp);
       thetrack.traj[geo::kX].push_back(tps.first);
       thetrack.traj[geo::kY].push_back(tps.second);
     }
@@ -343,10 +343,10 @@ void noe::produce(art::Event& evt)
 
   for(unsigned int i = 0; i < vertices.isValid() && vertices->size(); i++){
     vertex thevertex;
-    thevertex.x = (*vertices)[i].GetX();
-    thevertex.y = (*vertices)[i].GetY();
-    thevertex.z = (*vertices)[i].GetZ();
-    thevertex.t = (*vertices)[i].GetT()/1000*64; // translate to TDC
+    const std::pair<cppoint, cppoint> cp = cart_to_cp(*geo, (*vertices)[i].GetXYZ());
+    thevertex.pos[0] = cp.first;
+    thevertex.pos[1] = cp.second;
+    thevertex.time = (*vertices)[i].GetT()/1000*64; // translate to TDC
     ev.addvertex(thevertex);
   }
 

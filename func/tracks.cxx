@@ -1,8 +1,8 @@
 #include <gtk/gtk.h>
 #include <vector>
 #include <stdint.h>
-#include "geo.h"
 #include "event.h"
+#include "geo.h"
 #include "drawing.h"
 #include "tracks.h"
 
@@ -12,21 +12,13 @@ extern int gevi;
 extern int pixx, pixy;
 extern int active_track;
 
-static std::pair<int, int> trackpoint_to_screen(const trackpoint & tp)
-{
-  return std::pair<int, int>(
-    det_to_screen_x(tp.plane)          + (0.5 + tp.fplane)*pixx/2,
-    det_to_screen_y(tp.plane, tp.cell) + (0.5 - tp.fcell )*pixy
-  );
-}
-
 // Draws one track in the view that 'cr' is attached to (so must
 // be passed the correct 'traj') and returns all of the computed screen
 // track point positions.  If 'active', draw it highlighted as the active
 // track.
 static std::vector< std::pair<int, int> >
 draw_track_in_one_view(cairo_t * cr,
-                       const std::vector<trackpoint> & traj,
+                       const std::vector<cppoint> & traj,
                        const bool active)
 {
   std::vector< std::pair<int, int> > screenpoints;

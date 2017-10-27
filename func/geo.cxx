@@ -1,3 +1,7 @@
+#include <utility>
+#include <vector>
+#include <stdint.h>
+#include "event.h"
 #include "geo.h"
 
 static const int NDnplanes_perview = 8 * 12 + 11,
@@ -130,6 +134,14 @@ int det_to_screen_y(const int plane, const int cell)
          + (plane < first_mucatcher)*celldown*pixy/2
 
          - (xview?screenyoffset_xview:screenyoffset_yview);
+}
+
+std::pair<int, int> trackpoint_to_screen(const cppoint & tp)
+{
+  return std::pair<int, int>(
+    det_to_screen_x(tp.plane)          + (0.5 + tp.fplane)*pixx/2,
+    det_to_screen_y(tp.plane, tp.cell) + (0.5 - tp.fcell )*pixy
+  );
 }
 
 // Calculate the size of the bounding boxes for the detector's x and y

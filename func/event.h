@@ -6,7 +6,7 @@ struct hit{
   float tns;
 };
 
-struct trackpoint{
+struct cppoint{
   // The integer parts of the positions.
   uint16_t cell, plane;
 
@@ -22,11 +22,12 @@ struct track{
   int32_t time; // mean time in TDC ticks
 
   std::vector<hit> hits;
-  std::vector<trackpoint> traj[2 /* x and y */];
+  std::vector<cppoint> traj[2 /* x and y */];
 };
 
 struct vertex{
-  float x, y, z, t;
+  cppoint pos[2 /* x and y */];
+  int32_t time;
 };
 
 struct noeevent{

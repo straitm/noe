@@ -42,6 +42,10 @@ int det_to_screen_y(const int plane, const int cell);
 // side.
 int det_to_screen_x(const int plane);
 
+// Given a point in fractinal cell and plane coordinates, return the coordinates
+// in pixels.  The view is inferred from the plane number.
+std::pair<int, int> trackpoint_to_screen(const cppoint & tp);
+
 // Given a screen position, returns the plane number. Any x position within the
 // boundaries of hits displayed in a plane, including the right and left
 // pixels, will return the same plane number.  In the muon catcher, return the

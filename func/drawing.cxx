@@ -7,6 +7,7 @@
 #include "geo.h"
 #include "hits.h"
 #include "tracks.h"
+#include "vertices.h"
 
 extern std::vector<noeevent> theevents;
 extern int gevi;
@@ -77,8 +78,8 @@ void draw_event(const DRAWPARS * const drawpars)
 
   set_eventn_status(); // overwrite anything that draw_hits did
 
-  // Draw and save the state with hits but not tracks so that we can easily
-  // redraw with differently highlighted tracks later
+  // Draw and save the state with hits but not reco objects so that we can easily
+  // redraw with differently highlighted things later
   for(int i = 0; i < kXorY; i++){
     if(eventpattern[i] != NULL) cairo_pattern_destroy(eventpattern[i]);
     eventpattern[i] = cairo_pop_group(cr[i]);
@@ -88,6 +89,7 @@ void draw_event(const DRAWPARS * const drawpars)
   }
 
   draw_tracks(cr, drawpars);
+  draw_vertices(cr, drawpars);
 
   for(int i = 0; i < kXorY; i++){
     cairo_pop_group_to_source(cr[i]);

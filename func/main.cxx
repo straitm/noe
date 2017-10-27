@@ -23,6 +23,9 @@ Code style:
   terminals, which leaves 83 columns after 5 columns are used for line
   numbers. So this code will be mostly within 80 columns and certainly
   within 83.
+
+* No header guards.  Headers do not include other headers, and you
+  must put headers in the right order in source files.
 ======================================================================
 
 TODO:
@@ -46,9 +49,10 @@ standard slicer.
 #include <string.h>
 #include "drawing.h"
 #include "absgeo.h"
-#include "geo.h"
 #include "event.h"
+#include "geo.h"
 #include "tracks.h"
+#include "vertices.h"
 #include "hits.h"
 #include "status.h"
 #include "zoompan.h"
@@ -65,10 +69,13 @@ static int TDCSTEP = 4;
 extern std::vector<noeevent> theevents;
 int gevi = 0;
 
-// The positions of all the track points on the screen.
+// The positions of all the track points on the screen.  We save this
+// separately from the physical tracks so that we can quickly calculate
+// which track the user is mousing over.  Same idea for vertices.
 std::vector<screentrack_t> screentracks[kXorY];
+std::vector<screenvertex_t> screenvertices[kXorY];
 
-int active_plane = -1, active_cell = -1, active_track = -1;
+int active_plane = -1, active_cell = -1, active_track = -1, active_vertex = -1;
 
 extern int first_mucatcher, ncells_perplane;
 extern int nplanes;
@@ -179,6 +186,29 @@ static void change_highlighted_cell(const int oldactive_plane,
   for(int i = 0; i < kXorY; i++) cairo_destroy(cr[i]);
 }
 
+// Given a screen position, return the closest vertex. If the position
+// is nowhere near a vertex, can return -1. If there are no vertices,
+// returns -1.
+static int screen_to_activevertex(const noe_view_t view,
+                                 const int x, const int y)
+{
+  if(theevents[gevi].vertices.empty()) return -1;
+
+  int closesti = -1;
+  float mindist = FLT_MAX;
+  for(unsigned int i = 0; i < screenvertices[view].size(); i++){
+    const float dist = hypot(x-screenvertices[view][i].pos.first,
+                             y-screenvertices[view][i].pos.second);
+    if(dist < mindist){
+      mindist = dist;
+      closesti = screenvertices[view][i].i; // index into the full vertex array
+    }
+  }
+
+  if(mindist < 20) return closesti;
+  return -1;
+}
+
 // Given a screen position, return the closest track.  Preferably the
 // definition of "closest" matches what a user would expect.  If the
 // position is nowhere near a track, can return -1.  If there are no
@@ -240,6 +270,7 @@ static void update_active_objects(const noe_view_t V, const int x, const int y)
   active_plane = screen_to_plane      (V, x);
   active_cell  = screen_to_activecell (V, x, y);
   active_track = screen_to_activetrack(V, x, y);
+  active_vertex= screen_to_activevertex(V,x, y);
 
   // Change track first because it starts by redrawing all hits from a saved
   // cairo_pattern_t.
