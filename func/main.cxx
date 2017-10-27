@@ -56,6 +56,7 @@ standard slicer.
 #include "hits.h"
 #include "status.h"
 #include "zoompan.h"
+#include "active.h"
 
 // Let's see.  I believe both detectors read out in increments of 4 TDC units,
 // but the FD is multiplexed whereas the ND isn't, so any given channel at the
@@ -68,12 +69,6 @@ static int TDCSTEP = 4;
 /* The events and the current event index in the vector */
 extern std::vector<noeevent> theevents;
 int gevi = 0;
-
-// The positions of all the track points on the screen.  We save this
-// separately from the physical tracks so that we can quickly calculate
-// which track the user is mousing over.  Same idea for vertices.
-std::vector<screentrack_t> screentracks[kXorY];
-std::vector<screenvertex_t> screenvertices[kXorY];
 
 int active_plane = -1, active_cell = -1, active_track = -1, active_vertex = -1;
 
@@ -118,12 +113,6 @@ static gulong animationinterval = 0; // ms.  Immediately overwritten.
 static gulong freeruntimeoutid = 0;
 static gulong animatetimeoutid = 0;
 static gulong statmsgtimeoutid = 0;
-
-static bool visible_hit(const int32_t tdc)
-{
-  return tdc <= theevents[gevi].current_maxtick &&
-         tdc >= theevents[gevi].current_mintick - (TDCSTEP-1);
-}
 
 // Unhighlight the track that is no longer being moused over (if any)
 // and highlight the new one (if any).
@@ -186,91 +175,13 @@ static void change_highlighted_cell(const int oldactive_plane,
   for(int i = 0; i < kXorY; i++) cairo_destroy(cr[i]);
 }
 
-// Given a screen position, return the closest vertex. If the position
-// is nowhere near a vertex, can return -1. If there are no vertices,
-// returns -1.
-static int screen_to_activevertex(const noe_view_t view,
-                                 const int x, const int y)
-{
-  if(theevents[gevi].vertices.empty()) return -1;
-
-  int closesti = -1;
-  float mindist = FLT_MAX;
-  for(unsigned int i = 0; i < screenvertices[view].size(); i++){
-    const float dist = hypot(x-screenvertices[view][i].pos.first,
-                             y-screenvertices[view][i].pos.second);
-    if(dist < mindist){
-      mindist = dist;
-      closesti = screenvertices[view][i].i; // index into the full vertex array
-    }
-  }
-
-  if(mindist < 20) return closesti;
-  return -1;
-}
-
-// Given a screen position, return the closest track.  Preferably the
-// definition of "closest" matches what a user would expect.  If the
-// position is nowhere near a track, can return -1.  If there are no
-// tracks, returns -1.
-static int screen_to_activetrack(const noe_view_t view,
-                                 const int x, const int y)
-{
-  if(theevents[gevi].tracks.empty()) return -1;
-
-  int closesti = -1;
-  float mindist = FLT_MAX;
-  for(unsigned int i = 0; i < screentracks[view].size(); i++){
-    const float dist = screen_dist_to_track(x, y, screentracks[view][i].traj);
-    if(dist < mindist){
-      mindist = dist;
-      closesti = screentracks[view][i].i; // index into the full track array
-    }
-  }
-
-  if(mindist < 20) return closesti;
-  return -1;
-}
-
-// Given a screen position, returns the cell number.  If no hit cell is in this
-// position, return the number of the closest cell in screen y coordinates,
-// i.e. the closest hit cell that is directly above or below the screen position,
-// even if the closest one is in another direction.  But if this position is
-// outside the detector boxes on the right or left, return -1.
-static int screen_to_activecell(noe_view_t view, const int x, const int y)
-{
-  const int c = screen_to_cell(view, x, y);
-  const int plane = screen_to_plane(view, x);
-
-  if(c < 0) return -1;
-  if(c >= ncells_perplane) return -1;
-  if(plane >= first_mucatcher && view == kY && c >= 2*ncells_perplane/3) return -1;
-
-  std::vector<hit> & THEhits = theevents[gevi].hits;
-  int mindist = 9999, closestcell = -1;
-  for(unsigned int i = 0; i < THEhits.size(); i++){
-    if(THEhits[i].plane != plane) continue;
-    if(!visible_hit(THEhits[i].tdc)) continue;
-    const int dist = abs(THEhits[i].cell - c);
-    if(dist < mindist){
-      mindist = dist;
-      closestcell = THEhits[i].cell;
-    }
-  }
-
-  return closestcell;
-}
-
-static void update_active_objects(const noe_view_t V, const int x, const int y)
+void update_active_objects(const noe_view_t V, const int x, const int y)
 {
   const int oldactive_plane = active_plane;
   const int oldactive_cell  = active_cell;
   const int oldactive_track = active_track;
 
-  active_plane = screen_to_plane      (V, x);
-  active_cell  = screen_to_activecell (V, x, y);
-  active_track = screen_to_activetrack(V, x, y);
-  active_vertex= screen_to_activevertex(V,x, y);
+  update_active_indices(V, x, y, TDCSTEP);
 
   // Change track first because it starts by redrawing all hits from a saved
   // cairo_pattern_t.
