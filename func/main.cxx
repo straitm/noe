@@ -82,7 +82,7 @@ extern GtkWidget * edarea[kXorY];
 extern cairo_pattern_t * eventpattern[kXorY];
 
 /* GTK objects owned here */
-static GtkWidget * win = NULL;
+static GtkWidget * mainwin = NULL, * trackwin = NULL;
 static GtkWidget * animate_checkbox = NULL,
                  * cum_ani_checkbox = NULL,
                  * freerun_checkbox = NULL;
@@ -653,7 +653,7 @@ static void adjustspeed(GtkWidget * wg,
 // don't really want to call this 100 times when a user slowly resizes a window
 // that takes a long time to draw, but nor do I want to write a complex system
 // for dealing with that case...
-static gboolean redraw_window(GtkWidget * win, GdkEventConfigure * event,
+static gboolean redraw_window(GtkWidget * mainwin, GdkEventConfigure * event,
                               __attribute__((unused)) gpointer d)
 {
   static int oldwidth = event->width, oldheight = event->height;
@@ -663,7 +663,7 @@ static gboolean redraw_window(GtkWidget * win, GdkEventConfigure * event,
   first = false;
   oldwidth = event->width, oldheight = event->height;
 
-  if(need_redraw) gtk_widget_queue_draw(win);
+  if(need_redraw) gtk_widget_queue_draw(mainwin);
 
   return !need_redraw; // FALSE means *do* propagate this to children
 }
@@ -740,16 +740,31 @@ static GtkWidget * make_ueventbox()
   return ueventbox;
 }
 
+static GtkWidget * make_trackwin()
+{
+  GtkWidget * w = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_title(GTK_WINDOW(w), "NOE: Tracks");
+  //gtk_widget_hide_on_delete(w);
+
+  GtkWidget * tab = gtk_table_new(1, 1, FALSE); // necessary?
+  gtk_container_add(GTK_CONTAINER(trackwin), tab);
+
+  gtk_table_attach(GTK_TABLE(tab), statbox[3], 0, 1, 0, 1,
+    GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
+
+  return w;
+}
+
 // Sets up the GTK window, add user event hooks, start the necessary
 // timer(s), draw the first event.
 static void setup()
 {
   gtk_init(NULL, NULL);
-  win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title(GTK_WINDOW(win), "NOE: New nOva Event viewer");
-  g_signal_connect(win, "delete-event", G_CALLBACK(close_window), 0);
+  mainwin = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_title(GTK_WINDOW(mainwin), "NOE: New nOva Event viewer");
+  g_signal_connect(mainwin, "delete-event", G_CALLBACK(close_window), 0);
 
-  g_signal_connect(win,"configure-event",G_CALLBACK(redraw_window),NULL);
+  g_signal_connect(mainwin,"configure-event",G_CALLBACK(redraw_window),NULL);
   for(int i = 0; i < kXorY; i++){
     edarea[i] = gtk_drawing_area_new();
     g_signal_connect(edarea[i],"expose-event",G_CALLBACK(redraw_event),NULL);
@@ -803,7 +818,7 @@ static void setup()
 
   const int nrow = 5+NSTATBOXES, ncol = 11;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
-  gtk_container_add(GTK_CONTAINER(win), tab);
+  gtk_container_add(GTK_CONTAINER(mainwin), tab);
 
   GtkWidget * top_row_widgets[ncol] = {
     prev, next, mintickslider, maxtickslider, animate_checkbox, cum_ani_checkbox,
@@ -836,7 +851,7 @@ static void setup()
     stattext[i] = gtk_text_buffer_new(0);
     gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
-    gtk_table_attach(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i,
+    if(i != 3) gtk_table_attach(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i,
       GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
   }
 
@@ -853,9 +868,12 @@ static void setup()
 
   // This isn't the size I want, but along with requesting the size of the
   // edarea widgets, it has the desired effect, at least more or less.
-  gtk_window_set_default_size(GTK_WINDOW(win), 400, 300);
+  gtk_window_set_default_size(GTK_WINDOW(mainwin), 400, 300);
 
-  gtk_widget_show_all(win);
+  gtk_widget_show_all(mainwin);
+
+  trackwin = make_trackwin();
+  gtk_widget_show_all(trackwin);
 
   get_event(0);
   handle_event();
@@ -867,7 +885,8 @@ static void setup()
   // This is a case of a window resizing itself, and maybe window managers are
   // supposed to send an expose event in this case, but xmonad doesn't. Or maybe
   // they aren't supposed to according to the spec, but all the other ones do...
-  gtk_widget_queue_draw(win);
+  gtk_widget_queue_draw(mainwin);
+  gtk_widget_queue_draw(trackwin);
 
   if(!ghave_read_all) g_timeout_add(20, prefetch_an_event, NULL);
 
