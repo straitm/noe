@@ -136,7 +136,7 @@ int det_to_screen_y(const int plane, const int cell)
          - (xview?screenyoffset_xview:screenyoffset_yview);
 }
 
-std::pair<int, int> trackpoint_to_screen(const cppoint & tp)
+std::pair<int, int> cppoint_to_screen(const cppoint & tp)
 {
   return std::pair<int, int>(
     det_to_screen_x(tp.plane)          + (0.5 + tp.fplane)*pixx/2,

@@ -341,7 +341,7 @@ void noe::produce(art::Event& evt)
     ev.addtrack(thetrack);
   }
 
-  for(unsigned int i = 0; i < vertices.isValid() && vertices->size(); i++){
+  for(unsigned int i = 0; vertices.isValid() && i < vertices->size(); i++){
     vertex thevertex;
     const std::pair<cppoint, cppoint> cp = cart_to_cp(*geo, (*vertices)[i].GetXYZ());
     thevertex.pos[0] = cp.first;

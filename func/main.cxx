@@ -114,12 +114,10 @@ static gulong freeruntimeoutid = 0;
 static gulong animatetimeoutid = 0;
 static gulong statmsgtimeoutid = 0;
 
-// Unhighlight the track that is no longer being moused over (if any)
-// and highlight the new one (if any).
-static void change_highlighted_track(const int oldactive_track)
+// Unhighlight the reconstructed objects that are no longer being moused over
+// (if any) and highlight the new ones (if any).
+static void change_highlighted_reco()
 {
-  if(oldactive_track == active_track) return;
-
   // You can't just overdraw a track because it doesn't light up precise
   // rows of pixels. The way Cairo works, you end up with a thicker
   // track with bits of both colors in it.
@@ -135,6 +133,7 @@ static void change_highlighted_track(const int oldactive_track)
   drawpars.lasttick  = theevents[gevi].current_maxtick;
   drawpars.clear = false;
   draw_tracks(cr, &drawpars);
+  draw_vertices(cr, &drawpars);
 
   for(int i = 0; i < kXorY; i++){
     cairo_pop_group_to_source(cr[i]);
@@ -180,12 +179,14 @@ void update_active_objects(const noe_view_t V, const int x, const int y)
   const int oldactive_plane = active_plane;
   const int oldactive_cell  = active_cell;
   const int oldactive_track = active_track;
+  const int oldactive_vertex= active_vertex;
 
   update_active_indices(V, x, y, TDCSTEP);
 
   // Change track first because it starts by redrawing all hits from a saved
   // cairo_pattern_t.
-  change_highlighted_track(oldactive_track);
+  if(oldactive_track != active_track || oldactive_vertex != active_vertex)
+    change_highlighted_reco();
   change_highlighted_cell(oldactive_plane, oldactive_cell);
   set_eventn_status2();
   set_eventn_status3();
@@ -635,7 +636,7 @@ static void adjustspeed(GtkWidget * wg,
 {
   set_intervals(gtk_adjustment_get_value(GTK_ADJUSTMENT(wg)));
 
-  if(freeruntimeoutid) g_source_remove(freeruntimeoutid);
+  stop_freerun_timer();
   if(free_running && !animate) start_freerun_timer();
 
   if(animatetimeoutid) g_source_remove(animatetimeoutid);

@@ -25,7 +25,7 @@ draw_track_in_one_view(cairo_t * cr,
   if(traj.size() < 2) return screenpoints;
 
   for(unsigned int h = 0; h < traj.size(); h++)
-    screenpoints.push_back(trackpoint_to_screen(traj[h]));
+    screenpoints.push_back(cppoint_to_screen(traj[h]));
 
   if(active) cairo_set_source_rgb(cr, 1, 0, 0);
   else       cairo_set_source_rgb(cr, 0, 0.9, 0.9);

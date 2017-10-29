@@ -13,15 +13,43 @@ extern int pixx, pixy;
 extern int active_vertex;
 
 static std::pair<int, int> draw_vertex_in_one_view(cairo_t * cr,
-                                                  const cppoint & pos,
-                                                  const bool active)
+                                                   const cppoint & pos,
+                                                   const bool active)
 {
-  return std::pair<int, int>(0, 0); // TODO
+  std::pair<int, int> screenpoint = cppoint_to_screen(pos);
+
+  if(active) cairo_set_source_rgb(cr, 1, 0, 0);
+  else       cairo_set_source_rgb(cr, 1, 0, 1);
+  cairo_set_line_width(cr, active?2.5:1.5);
+
+  // As with tracks, don't bother checking if we're in view since drawing is
+  // fairly cheap.
+
+  const int starsize = 5;
+
+  cairo_move_to(cr, screenpoint.first-starsize, screenpoint.second-starsize);
+  cairo_line_to(cr, screenpoint.first+starsize, screenpoint.second+starsize);
+  cairo_stroke(cr);
+
+  cairo_move_to(cr, screenpoint.first+starsize, screenpoint.second-starsize);
+  cairo_line_to(cr, screenpoint.first-starsize, screenpoint.second+starsize);
+  cairo_stroke(cr);
+
+  cairo_move_to(cr, screenpoint.first-starsize, screenpoint.second);
+  cairo_line_to(cr, screenpoint.first+starsize, screenpoint.second);
+  cairo_stroke(cr);
+
+  cairo_move_to(cr, screenpoint.first, screenpoint.second-starsize);
+  cairo_line_to(cr, screenpoint.first, screenpoint.second+starsize);
+  cairo_stroke(cr);
+
+  return screenpoint;
 }
 
 void draw_vertices(cairo_t ** cr, const DRAWPARS * const drawpars)
 {
   for(int V = 0; V < kXorY; V++){
+    screenvertices[V].clear();
     for(unsigned int i = 0; i < theevents[gevi].vertices.size(); i++){
       vertex & vert = theevents[gevi].vertices[i];
       if((int)i != active_vertex &&
@@ -33,7 +61,7 @@ void draw_vertices(cairo_t ** cr, const DRAWPARS * const drawpars)
       }
     }
 
-    // Draw the active track last so it is on top
+    // Draw the active vertex last so it is on top
     if(active_vertex >= 0){
       vertex & vert = theevents[gevi].vertices[active_vertex];
       if(vert.time >= drawpars->firsttick && vert.time <= drawpars->lasttick){
@@ -43,6 +71,5 @@ void draw_vertices(cairo_t ** cr, const DRAWPARS * const drawpars)
         screenvertices[V].push_back(sv);
       }
     }
-
   }
 }
