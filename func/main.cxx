@@ -40,6 +40,8 @@ TODO:
 any kind of rb::Clusters, specified in the fcl, and defaulting to the
 standard slicer.
 
+* Allow applying time window to all events -- useful for spills.
+
 */
 
 #include <gtk/gtk.h>
@@ -676,6 +678,11 @@ static void close_window()
   _exit(0);
 }
 
+static void opentrackwin()
+{
+  gtk_widget_show_all(trackwin);
+}
+
 /**********************************************************************/
 /*                          Widget setup                              */
 /**********************************************************************/
@@ -744,10 +751,11 @@ static GtkWidget * make_trackwin()
 {
   GtkWidget * w = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_title(GTK_WINDOW(w), "NOE: Tracks");
-  //gtk_widget_hide_on_delete(w);
+  gtk_window_set_default_size(GTK_WINDOW(w), 400, 50);
+  g_signal_connect(w, "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
 
   GtkWidget * tab = gtk_table_new(1, 1, FALSE); // necessary?
-  gtk_container_add(GTK_CONTAINER(trackwin), tab);
+  gtk_container_add(GTK_CONTAINER(w), tab);
 
   gtk_table_attach(GTK_TABLE(tab), statbox[3], 0, 1, 0, 1,
     GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
@@ -755,7 +763,7 @@ static GtkWidget * make_trackwin()
   return w;
 }
 
-// Sets up the GTK window, add user event hooks, start the necessary
+// Sets up the GTK windows, add user event hooks, start the necessary
 // timer(s), draw the first event.
 static void setup()
 {
@@ -816,7 +824,7 @@ static void setup()
   ueventbut = gtk_button_new_with_mnemonic("_Go to event");
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
-  const int nrow = 5+NSTATBOXES, ncol = 11;
+  const int nrow = 3+NSTATBOXES, ncol = 11;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(mainwin), tab);
 
@@ -851,9 +859,17 @@ static void setup()
     stattext[i] = gtk_text_buffer_new(0);
     gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
-    if(i != 3) gtk_table_attach(GTK_TABLE(tab), statbox[i], 0, ncol, 2+i, 3+i,
+    if(i != 3) gtk_table_attach(GTK_TABLE(tab), statbox[i], 0, ncol-1, 2+i, 3+i,
       GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
   }
+
+  trackwin = make_trackwin();
+
+  GtkWidget * const tracksbut = gtk_button_new_with_mnemonic("_Show track info");
+  g_signal_connect(tracksbut, "clicked",  G_CALLBACK(opentrackwin), NULL);
+
+  gtk_table_attach(GTK_TABLE(tab), tracksbut, ncol-1, ncol, 2, 4,
+      GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
 
   for(int i = 0; i < kXorY; i++)
     gtk_table_attach(GTK_TABLE(tab), edarea[i], 0, ncol,
@@ -871,9 +887,6 @@ static void setup()
   gtk_window_set_default_size(GTK_WINDOW(mainwin), 400, 300);
 
   gtk_widget_show_all(mainwin);
-
-  trackwin = make_trackwin();
-  gtk_widget_show_all(trackwin);
 
   get_event(0);
   handle_event();

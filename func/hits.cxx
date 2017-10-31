@@ -90,6 +90,8 @@ void draw_hit(cairo_t * cr, const hit & thishit, GtkWidget ** edarea)
   // to look at.  If cells are visually large, make them closer to the
   // actual size of the scintillator.
   // XXX how about a yexpand to show the scintillator size in y?
+  // XXX are tracks correctly aligned with hits in both expanded and unexpanded
+  // styles?  (Probably not!)
   const bool xexpand = pixx <= 3;
   const int epixx = xexpand?pixx:scintpix_from_pixx(pixx);
 
