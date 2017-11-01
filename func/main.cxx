@@ -714,6 +714,26 @@ static GtkWidget * make_speedslider()
   return speedslider;
 }
 
+static void set_bg_color_to_main(GtkWidget * widg)
+{
+  static GdkColor * color = NULL;
+  if(color == NULL){
+    color = new GdkColor;
+    gtk_widget_realize(mainwin); // because we may not have drawn the window yet
+    gtk_style_lookup_color(gtk_widget_get_style(mainwin), "bg_color", color);
+  }
+  gtk_widget_modify_base(widg, GTK_STATE_NORMAL, color);
+}
+
+static void makestatbox(const int i)
+{
+  statbox[i]  = gtk_text_view_new();
+  stattext[i] = gtk_text_buffer_new(0);
+  gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
+  gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
+  set_bg_color_to_main(statbox[i]);
+}
+
 static GtkWidget * make_ticklabel(const bool ismax)
 {
   GtkWidget * ticklabel = gtk_text_view_new();
@@ -723,6 +743,7 @@ static GtkWidget * make_ticklabel(const bool ismax)
   gtk_text_buffer_set_text(ticklabeltext, ticklabelbuf, strlen(ticklabelbuf));
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(ticklabel), ticklabeltext);
   gtk_text_view_set_editable(GTK_TEXT_VIEW(ticklabel), false);
+  set_bg_color_to_main(ticklabel);
   return ticklabel;
 }
 
@@ -735,6 +756,7 @@ static GtkWidget * make_speedlabel()
   gtk_text_buffer_set_text(speedlabeltext, speedlabelbuf, strlen(speedlabelbuf));
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(speedlabel), speedlabeltext);
   gtk_text_view_set_editable(GTK_TEXT_VIEW(speedlabel), false);
+  set_bg_color_to_main(speedlabel);
   return speedlabel;
 }
 
@@ -840,26 +862,12 @@ static void setup()
     gtk_table_attach(GTK_TABLE(tab), top_row_widgets[c], c, c+1, 0, 1,
       GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
 
-    if(second_row_widgets[c] != NULL){
+    if(second_row_widgets[c] != NULL)
       gtk_table_attach(GTK_TABLE(tab),second_row_widgets[c],c,c+1,1,2,
         GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
-    }
-    else{
-      // Have to put a blank text box in each table cell or else the
-      // background color is inconsistent.
-      GtkWidget * blanklabel = gtk_text_view_new();
-      gtk_text_view_set_editable(GTK_TEXT_VIEW(blanklabel), false);
-      gtk_table_attach(GTK_TABLE(tab), blanklabel, c, c+1, 1, 2,
-        GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
-    }
   }
 
-  for(int i = 0; i < NSTATBOXES; i++){
-    statbox[i]  = gtk_text_view_new();
-    stattext[i] = gtk_text_buffer_new(0);
-    gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
-    gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
-  }
+  for(int i = 0; i < NSTATBOXES; i++) makestatbox(i);
 
   gtk_table_attach(GTK_TABLE(tab), statbox[statrunevent], 0, ncol-1, 2, 3,
     GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
@@ -914,7 +922,6 @@ static void setup()
   // supposed to send an expose event in this case, but xmonad doesn't. Or maybe
   // they aren't supposed to according to the spec, but all the other ones do...
   gtk_widget_queue_draw(mainwin);
-  gtk_widget_queue_draw(trackwin);
 
   if(!ghave_read_all) g_timeout_add(20, prefetch_an_event, NULL);
 
