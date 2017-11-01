@@ -1,4 +1,12 @@
-static const int NSTATBOXES = 5;
+enum statcontents {
+  statrunevent,
+  stattiming,
+  stathit,
+  stattrack,
+  staterror,
+  NSTATBOXES = 5
+};
+
 
 // Set the 'boxn'th status line to the given text, counted from zero.
 void set_status(const int boxn, const char * format, ...);

@@ -41,11 +41,11 @@ void set_status(const int boxn, const char * format, ...)
 void set_eventn_status0()
 {
   if(theevents.empty()){
-    set_status(0, "No events");
+    set_status(statrunevent, "No events");
     return;
   }
 
-  set_status(0, "Run %'d, subrun %d, event %'d "
+  set_status(statrunevent, "Run %'d, subrun %d, event %'d "
                 "(%'d/%'d in the file(s), %.0f%% loaded)",
     theevents[gevi].nrun, theevents[gevi].nsubrun,
     theevents[gevi].nevent, gevi+1,
@@ -73,13 +73,13 @@ void set_eventn_status1()
       BOTANY_BAY_OH_INT(E.current_maxtick),
       BOTANY_BAY_OH_NO( E.current_maxtick/64.));
 
-  set_status(1, status1);
+  set_status(stattiming, status1);
 }
 
 void set_eventn_status2()
 {
   if(active_plane < 0 || active_cell < 0){
-    set_status(2, "Mouse over a cell for more information");
+    set_status(stathit, "Mouse over a cell for more information");
     return;
   }
 
@@ -115,22 +115,21 @@ void set_eventn_status2()
       }
     }
   }
-  set_status(2, status2);
+  set_status(stathit, status2);
 }
 
-// TODO: make this a pop-up window (or similar) with more detailed information
 void set_eventn_status3()
 {
   if(active_track < 0 && !theevents[gevi].tracks.empty()){
-    set_status(3, "Mouse over a track for more information");
+    set_status(stattrack, "Mouse over a track for information on it");
     return;
   }
 
   if(theevents[gevi].tracks.empty()) return;
 
   char status[MAXSTATUS];
-  int pos = snprintf(status, MAXSTATUS, "Track %d: ", active_track);
-  pos += snprintf(status+pos, MAXSTATUS-pos, "start (%.1f, %.1f, %.1f), "
+  int pos = snprintf(status, MAXSTATUS, "Track %d\n", active_track);
+  pos += snprintf(status+pos, MAXSTATUS-pos, "start (%.1f, %.1f, %.1f)\n"
                                              "stop (%.1f, %.1f, %.1f)",
     theevents[gevi].tracks[active_track].startx/10.,
     theevents[gevi].tracks[active_track].starty/10.,
@@ -139,12 +138,12 @@ void set_eventn_status3()
     theevents[gevi].tracks[active_track].stopy/10.,
     theevents[gevi].tracks[active_track].stopz/10.);
 
-  set_status(3, status);
+  set_status(stattrack, status);
 }
 
 void set_eventn_status2progress(const int nhit, const int tothits)
 {
-  set_status(2, "Processing big event, %d/%d hits", nhit, tothits);
+  set_status(stathit, "Processing big event, %d/%d hits", nhit, tothits);
 }
 
 void set_eventn_status()

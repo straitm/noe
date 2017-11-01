@@ -424,7 +424,7 @@ static bool have_event_by_number(const unsigned int n)
 // Blank out the fourth status line that sometimes has error messages
 static gboolean clear_error_message(__attribute__((unused)) gpointer dt)
 {
-  set_status(4, "");
+  set_status(staterror, "");
   return FALSE;
 }
 
@@ -443,7 +443,7 @@ static void getuserevent()
      || endptr == optarg || *endptr != '\0'
      || !have_event_by_number(userevent)){
     if(!theevents.empty())
-      set_status(4, "Entered event invalid or not available. I have "
+      set_status(staterror, "Entered event invalid or not available. I have "
                  "events %d through %d%s%s",
                  theevents[0].nevent,
                  theevents[theevents.size()-1].nevent,
