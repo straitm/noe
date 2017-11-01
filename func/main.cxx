@@ -122,7 +122,10 @@ static void change_highlighted_reco()
 {
   // You can't just overdraw a track because it doesn't light up precise
   // rows of pixels. The way Cairo works, you end up with a thicker
-  // track with bits of both colors in it.
+  // track with bits of both colors in it. XXX This doesn't quite work
+  // right with animations.  If a track is highlighted and then there's
+  // an animation step, the bits-of-both-colors problem still appears.
+  // But this is a pretty minor problem.
   cairo_t * cr[kXorY];
   for(int i = 0; i < kXorY; i++){
     cairo_push_group(cr[i] = gdk_cairo_create(edarea[i]->window));
@@ -133,7 +136,7 @@ static void change_highlighted_reco()
   DRAWPARS drawpars;
   drawpars.firsttick = theevents[gevi].current_mintick;
   drawpars.lasttick  = theevents[gevi].current_maxtick;
-  drawpars.clear = false;
+  drawpars.clear = true;
   draw_tracks(cr, &drawpars);
   draw_vertices(cr, &drawpars);
 

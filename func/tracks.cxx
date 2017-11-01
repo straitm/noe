@@ -47,7 +47,7 @@ draw_track_in_one_view(cairo_t * cr,
 void draw_tracks(cairo_t ** cr, const DRAWPARS * const drawpars)
 {
   for(int V = 0; V < kXorY; V++){
-    screentracks[V].clear();
+    if(drawpars->clear) screentracks[V].clear();
 
     for(unsigned int i = 0; i < theevents[gevi].tracks.size(); i++){
       track & tr = theevents[gevi].tracks[i];
