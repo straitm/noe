@@ -190,8 +190,8 @@ void update_active_objects(const noe_view_t V, const int x, const int y)
   if(oldactive_track != active_track || oldactive_vertex != active_vertex)
     change_highlighted_reco();
   change_highlighted_cell(oldactive_plane, oldactive_cell);
-  set_eventn_status2();
-  set_eventn_status3();
+  set_eventn_status_hit();
+  set_eventn_status_track();
 }
 
 // To be called periodically and when events are changed to get the
@@ -588,6 +588,8 @@ static void restart_animation(__attribute__((unused)) GtkWidget * w,
   handle_event();
 }
 
+// XXX redraws of tracks and vertices when you do this has an undesired
+// effect of thickening their lines.
 static void adjusttick(GtkWidget * wg, const gpointer dt)
 {
   if(adjusttick_callback_inhibit) return;
@@ -949,7 +951,7 @@ void realmain(const bool have_read_all)
     setup();
   }
   else if(prefetching){
-    set_eventn_status0();
+    set_eventn_status_runevent();
     prefetching = false;
   }
   else{

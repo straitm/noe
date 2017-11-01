@@ -38,7 +38,7 @@ void set_status(const int boxn, const char * format, ...)
   gtk_widget_draw(statbox[boxn], NULL);
 }
 
-void set_eventn_status0()
+void set_eventn_status_runevent()
 {
   if(theevents.empty()){
     set_status(statrunevent, "No events");
@@ -52,7 +52,7 @@ void set_eventn_status0()
     (int)theevents.capacity(), 100*float(theevents.size())/theevents.capacity());
 }
 
-void set_eventn_status1()
+void set_eventn_status_timing()
 {
   noeevent & E = theevents[gevi];
 
@@ -76,7 +76,7 @@ void set_eventn_status1()
   set_status(stattiming, status1);
 }
 
-void set_eventn_status2()
+void set_eventn_status_hit()
 {
   if(active_plane < 0 || active_cell < 0){
     set_status(stathit, "Mouse over a cell for more information");
@@ -118,7 +118,7 @@ void set_eventn_status2()
   set_status(stathit, status2);
 }
 
-void set_eventn_status3()
+void set_eventn_status_track()
 {
   if(active_track < 0 && !theevents[gevi].tracks.empty()){
     set_status(stattrack, "Mouse over a track for information on it");
@@ -141,18 +141,18 @@ void set_eventn_status3()
   set_status(stattrack, status);
 }
 
-void set_eventn_status2progress(const int nhit, const int tothits)
+void set_eventn_status_progress(const int nhit, const int tothits)
 {
   set_status(stathit, "Processing big event, %d/%d hits", nhit, tothits);
 }
 
 void set_eventn_status()
 {
-  set_eventn_status0();
+  set_eventn_status_runevent();
 
   if(theevents.empty()) return;
 
-  set_eventn_status1();
-  set_eventn_status2();
-  set_eventn_status3();
+  set_eventn_status_timing();
+  set_eventn_status_hit();
+  set_eventn_status_track();
 }
