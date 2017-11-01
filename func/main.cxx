@@ -824,7 +824,7 @@ static void setup()
   ueventbut = gtk_button_new_with_mnemonic("_Go to event");
   g_signal_connect(ueventbut, "clicked",  G_CALLBACK(getuserevent), NULL);
 
-  const int nrow = 3+NSTATBOXES, ncol = 11;
+  const int nrow = 8, ncol = 11;
   GtkWidget * tab = gtk_table_new(nrow, ncol, FALSE);
   gtk_container_add(GTK_CONTAINER(mainwin), tab);
 
@@ -859,26 +859,41 @@ static void setup()
     stattext[i] = gtk_text_buffer_new(0);
     gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
     gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
-    if(i != 3) gtk_table_attach(GTK_TABLE(tab), statbox[i], 0, ncol-1, 2+i, 3+i,
-      GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
   }
+
+  gtk_table_attach(GTK_TABLE(tab), statbox[statrunevent], 0, ncol-1, 2, 3,
+    GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
+  gtk_table_attach(GTK_TABLE(tab), statbox[stattiming],   0, ncol-1, 3, 4,
+    GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
+  gtk_table_attach(GTK_TABLE(tab), statbox[stathit],      0, ncol-1, 4, 5,
+    GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
+  gtk_table_attach(GTK_TABLE(tab), statbox[staterror],    0, ncol-1, 5, 6,
+    GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
 
   trackwin = make_trackwin();
 
-  GtkWidget * const tracksbut = gtk_button_new_with_mnemonic("_Show track info");
+  GtkWidget * const tracksbut = gtk_button_new_with_mnemonic("Show _track info");
   g_signal_connect(tracksbut, "clicked",  G_CALLBACK(opentrackwin), NULL);
 
+  GtkWidget * const vertexbut = gtk_button_new_with_mnemonic("Show _vertex info");
+  //g_signal_connect(tracksbut, "clicked",  G_CALLBACK(openvertexwin), NULL);
+
   gtk_table_attach(GTK_TABLE(tab), tracksbut, ncol-1, ncol, 2, 4,
-      GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
+      GtkAttachOptions(GTK_EXPAND | GTK_FILL),
+      GtkAttachOptions(GTK_EXPAND | GTK_FILL), 0, 0);
+
+  gtk_table_attach(GTK_TABLE(tab), vertexbut, ncol-1, ncol, 4, 6,
+      GtkAttachOptions(GTK_EXPAND | GTK_FILL),
+      GtkAttachOptions(GTK_EXPAND | GTK_FILL), 0, 0);
 
   for(int i = 0; i < kXorY; i++)
     gtk_table_attach(GTK_TABLE(tab), edarea[i], 0, ncol,
-                     2+NSTATBOXES+i*2, 3+NSTATBOXES+i*2, // too clever
+                     6+2*i, 7+2*i,
                      GtkAttachOptions(GTK_EXPAND | GTK_FILL),
                      GtkAttachOptions(GTK_EXPAND | GTK_FILL), 0, 0);
 
   gtk_table_attach(GTK_TABLE(tab), gtk_hseparator_new(), 0, ncol,
-                   3+NSTATBOXES, 4+NSTATBOXES,
+                   7, 8,
                    GtkAttachOptions(GTK_EXPAND | GTK_FILL),
                    GtkAttachOptions(GTK_SHRINK), 0, 0);
 
