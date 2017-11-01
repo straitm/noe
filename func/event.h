@@ -26,8 +26,9 @@ struct track{
 };
 
 struct vertex{
-  cppoint pos[2 /* x and y */];
-  int32_t time;
+  cppoint pos[2 /* x and y */]; // Positions in plane/cell space
+  short posx, posy, posz; // Positions in real space, in integer mm
+  int32_t time; // time in TDC ticks
 };
 
 struct noeevent{

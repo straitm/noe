@@ -84,7 +84,7 @@ extern GtkWidget * edarea[kXorY];
 extern cairo_pattern_t * eventpattern[kXorY];
 
 /* GTK objects owned here */
-static GtkWidget * mainwin = NULL, * trackwin = NULL;
+static GtkWidget * mainwin = NULL, * trackwin = NULL, * vertexwin = NULL;
 static GtkWidget * animate_checkbox = NULL,
                  * cum_ani_checkbox = NULL,
                  * freerun_checkbox = NULL;
@@ -192,6 +192,7 @@ void update_active_objects(const noe_view_t V, const int x, const int y)
   change_highlighted_cell(oldactive_plane, oldactive_cell);
   set_eventn_status_hit();
   set_eventn_status_track();
+  set_eventn_status_vertex();
 }
 
 // To be called periodically and when events are changed to get the
@@ -680,6 +681,11 @@ static void close_window()
   _exit(0);
 }
 
+static void openvertexwin()
+{
+  gtk_widget_show_all(vertexwin);
+}
+
 static void opentrackwin()
 {
   gtk_widget_show_all(trackwin);
@@ -733,6 +739,7 @@ static void makestatbox(const int i)
   stattext[i] = gtk_text_buffer_new(0);
   gtk_text_view_set_buffer(GTK_TEXT_VIEW(statbox[i]), stattext[i]);
   gtk_text_view_set_editable(GTK_TEXT_VIEW(statbox[i]), false);
+  gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(statbox[i]), false);
   set_bg_color_to_main(statbox[i]);
 }
 
@@ -771,17 +778,19 @@ static GtkWidget * make_ueventbox()
   return ueventbox;
 }
 
-static GtkWidget * make_trackwin()
+static GtkWidget * make_aux_win(const char * const name, const statcontents si)
 {
   GtkWidget * w = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title(GTK_WINDOW(w), "NOE: Tracks");
+  char winname[1024];
+  snprintf(winname, 1024, "NOE: %s", name);
+  gtk_window_set_title(GTK_WINDOW(w), winname);
   gtk_window_set_default_size(GTK_WINDOW(w), 400, 50);
   g_signal_connect(w, "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
 
   GtkWidget * tab = gtk_table_new(1, 1, FALSE); // necessary?
   gtk_container_add(GTK_CONTAINER(w), tab);
 
-  gtk_table_attach(GTK_TABLE(tab), statbox[3], 0, 1, 0, 1,
+  gtk_table_attach(GTK_TABLE(tab), statbox[si], 0, 1, 0, 1,
     GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
 
   return w;
@@ -880,13 +889,14 @@ static void setup()
   gtk_table_attach(GTK_TABLE(tab), statbox[staterror],    0, ncol-1, 5, 6,
     GtkAttachOptions(GTK_EXPAND | GTK_FILL), GTK_SHRINK, 0, 0);
 
-  trackwin = make_trackwin();
+  trackwin  = make_aux_win("Tracks"  , stattrack );
+  vertexwin = make_aux_win("Vertices", statvertex);
 
   GtkWidget * const tracksbut = gtk_button_new_with_mnemonic("Show _track info");
   g_signal_connect(tracksbut, "clicked",  G_CALLBACK(opentrackwin), NULL);
 
   GtkWidget * const vertexbut = gtk_button_new_with_mnemonic("Show _vertex info");
-  //g_signal_connect(tracksbut, "clicked",  G_CALLBACK(openvertexwin), NULL);
+  g_signal_connect(vertexbut, "clicked",  G_CALLBACK(openvertexwin), NULL);
 
   gtk_table_attach(GTK_TABLE(tab), tracksbut, ncol-1, ncol, 2, 4,
       GtkAttachOptions(GTK_EXPAND | GTK_FILL),

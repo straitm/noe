@@ -346,6 +346,9 @@ void noe::produce(art::Event& evt)
     const std::pair<cppoint, cppoint> cp = cart_to_cp(*geo, (*vertices)[i].GetXYZ());
     thevertex.pos[0] = cp.first;
     thevertex.pos[1] = cp.second;
+    thevertex.posx  = 10*(*vertices)[i].GetX();
+    thevertex.posy  = 10*(*vertices)[i].GetY();
+    thevertex.posz  = 10*(*vertices)[i].GetZ();
     thevertex.time = (*vertices)[i].GetT()/1000*64; // translate to TDC
     ev.addvertex(thevertex);
   }

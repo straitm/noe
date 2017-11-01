@@ -13,7 +13,7 @@ GtkWidget * statbox[NSTATBOXES];
 
 extern std::vector<noeevent> theevents;
 extern int gevi;
-extern int active_plane, active_cell, active_track;
+extern int active_plane, active_cell, active_track, active_vertex;
 
 extern bool ghave_read_all;
 
@@ -118,6 +118,25 @@ void set_eventn_status_hit()
   set_status(stathit, status2);
 }
 
+void set_eventn_status_vertex()
+{
+  if(active_vertex < 0 && !theevents[gevi].vertices.empty()){
+    set_status(statvertex, "Mouse over a vertex for information on it");
+    return;
+  }
+
+  if(theevents[gevi].vertices.empty()) return;
+
+  char status[MAXSTATUS];
+  int pos = snprintf(status, MAXSTATUS, "Vertex %d\n", active_vertex);
+  pos += snprintf(status+pos, MAXSTATUS-pos, "at (%.1f, %.1f, %.1f)",
+    theevents[gevi].vertices[active_vertex].posx/10.,
+    theevents[gevi].vertices[active_vertex].posy/10.,
+    theevents[gevi].vertices[active_vertex].posz/10.);
+
+  set_status(statvertex, status);
+}
+
 void set_eventn_status_track()
 {
   if(active_track < 0 && !theevents[gevi].tracks.empty()){
@@ -155,4 +174,5 @@ void set_eventn_status()
   set_eventn_status_timing();
   set_eventn_status_hit();
   set_eventn_status_track();
+  set_eventn_status_vertex();
 }

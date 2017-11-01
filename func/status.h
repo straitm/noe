@@ -2,9 +2,10 @@ enum statcontents {
   statrunevent,
   stattiming,
   stathit,
-  stattrack,
   staterror,
-  NSTATBOXES = 5
+  stattrack,
+  statvertex,
+  NSTATBOXES
 };
 
 
@@ -24,6 +25,9 @@ void set_eventn_status_hit();
 
 // Set the track info status line
 void set_eventn_status_track();
+
+// Set the vertex info status line
+void set_eventn_status_vertex();
 
 // Set the second status line to its alternative contents -- status bar
 // while doing a long computation.

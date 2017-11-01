@@ -139,7 +139,7 @@ void draw_hits(cairo_t ** cr, const DRAWPARS * const drawpars, GtkWidget ** edar
        thishit.tdc > drawpars->lasttick) continue;
 
     if(bigevent && (++ndrawn)%big == 0)
-      set_eventn_status2progress(ndrawn, THEhits.size());
+      set_eventn_status_progress(ndrawn, THEhits.size());
 
     draw_hit(cr[thishit.plane%2 == 1?kX:kY], thishit, edarea);
   }
