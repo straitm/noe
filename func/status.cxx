@@ -120,8 +120,11 @@ void set_eventn_status_hit()
 
 void set_eventn_status_vertex()
 {
-  if(active_vertex < 0 && !theevents[gevi].vertices.empty()){
-    set_status(statvertex, "Mouse over a vertex for information on it");
+  if(active_vertex < 0){
+    if(theevents[gevi].vertices.empty())
+      set_status(statvertex, "There are no vertices");
+    else
+      set_status(statvertex, "Mouse over a vertex for information on it");
     return;
   }
 
@@ -129,18 +132,23 @@ void set_eventn_status_vertex()
 
   char status[MAXSTATUS];
   int pos = snprintf(status, MAXSTATUS, "Vertex %d\n", active_vertex);
-  pos += snprintf(status+pos, MAXSTATUS-pos, "at (%.1f, %.1f, %.1f)",
+  pos += snprintf(status+pos, MAXSTATUS-pos, "at (%.1f, %.1f, %.1f)\n",
     theevents[gevi].vertices[active_vertex].posx/10.,
     theevents[gevi].vertices[active_vertex].posy/10.,
     theevents[gevi].vertices[active_vertex].posz/10.);
+  pos += snprintf(status+pos, MAXSTATUS-pos, "time %.4f %c%cs",
+    theevents[gevi].vertices[active_vertex].tns/1000, 0xce, 0xbc);
 
   set_status(statvertex, status);
 }
 
 void set_eventn_status_track()
 {
-  if(active_track < 0 && !theevents[gevi].tracks.empty()){
-    set_status(stattrack, "Mouse over a track for information on it");
+  if(active_track < 0){
+    if(theevents[gevi].tracks.empty())
+      set_status(stattrack, "There are no tracks");
+    else
+      set_status(stattrack, "Mouse over a track for information on it");
     return;
   }
 
@@ -149,13 +157,15 @@ void set_eventn_status_track()
   char status[MAXSTATUS];
   int pos = snprintf(status, MAXSTATUS, "Track %d\n", active_track);
   pos += snprintf(status+pos, MAXSTATUS-pos, "start (%.1f, %.1f, %.1f)\n"
-                                             "stop (%.1f, %.1f, %.1f)",
+                                             "stop (%.1f, %.1f, %.1f)\n",
     theevents[gevi].tracks[active_track].startx/10.,
     theevents[gevi].tracks[active_track].starty/10.,
     theevents[gevi].tracks[active_track].startz/10.,
     theevents[gevi].tracks[active_track].stopx/10.,
     theevents[gevi].tracks[active_track].stopy/10.,
     theevents[gevi].tracks[active_track].stopz/10.);
+  pos += snprintf(status+pos, MAXSTATUS-pos, "time %.4f %c%cs",
+    theevents[gevi].tracks[active_track].tns/1000, 0xce, 0xbc);
 
   set_status(stattrack, status);
 }

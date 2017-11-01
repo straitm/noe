@@ -20,6 +20,7 @@ struct track{
   // integer mm to save a little memory
   short startx, starty, startz, stopx, stopy, stopz;
   int32_t time; // mean time in TDC ticks
+  float tns; // time in ns.  Copied from a double.
 
   std::vector<hit> hits;
   std::vector<cppoint> traj[2 /* x and y */];
@@ -29,6 +30,7 @@ struct vertex{
   cppoint pos[2 /* x and y */]; // Positions in plane/cell space
   short posx, posy, posz; // Positions in real space, in integer mm
   int32_t time; // time in TDC ticks
+  float tns; // time in ns.  Copied from a double.
 };
 
 struct noeevent{

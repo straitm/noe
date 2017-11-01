@@ -787,7 +787,7 @@ static GtkWidget * make_aux_win(const char * const name, const statcontents si)
   char winname[1024];
   snprintf(winname, 1024, "NOE: %s", name);
   gtk_window_set_title(GTK_WINDOW(w), winname);
-  gtk_window_set_default_size(GTK_WINDOW(w), 400, 50);
+  gtk_window_set_default_size(GTK_WINDOW(w), 400, 68 /* four lines for me */);
   g_signal_connect(w, "delete-event", G_CALLBACK(gtk_widget_hide_on_delete), NULL);
 
   GtkWidget * tab = gtk_table_new(1, 1, FALSE); // necessary?

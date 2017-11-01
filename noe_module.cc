@@ -324,7 +324,7 @@ void noe::produce(art::Event& evt)
     thetrack.stopx  = 10*(*tracks)[i].Stop ().X();
     thetrack.stopy  = 10*(*tracks)[i].Stop ().Y();
     thetrack.stopz  = 10*(*tracks)[i].Stop ().Z();
-    // TODO: make exact time available to the user.  For vertices, too.
+    thetrack.tns  = (*tracks)[i].MeanTNS();
     thetrack.time = (*tracks)[i].MeanTNS()/1000*64.; // translate to TDC
     for(unsigned int c = 0; c < (*tracks)[i].NCell(); c++){
       hit thehit;
@@ -349,6 +349,7 @@ void noe::produce(art::Event& evt)
     thevertex.posx  = 10*(*vertices)[i].GetX();
     thevertex.posy  = 10*(*vertices)[i].GetY();
     thevertex.posz  = 10*(*vertices)[i].GetZ();
+    thevertex.tns  = (*vertices)[i].GetT();
     thevertex.time = (*vertices)[i].GetT()/1000*64; // translate to TDC
     ev.addvertex(thevertex);
   }
