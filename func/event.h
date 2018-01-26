@@ -18,7 +18,12 @@ struct cppoint{
 
 struct track{
   // integer mm to save a little memory
-  short startx, starty, startz, stopx, stopy, stopz;
+  int16_t startx, starty, stopx, stopy;
+
+  // FD is longer than 32767mm, and shorter than 65535mm, but
+  // let's not cut it too close.
+  int32_t startz, stopz;
+
   int32_t time; // mean time in TDC ticks
   float tns; // time in ns.  Copied from a double.
 
