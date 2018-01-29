@@ -266,8 +266,9 @@ void noe::produce(art::Event& evt)
   art::Handle< vector<rb::CellHit> > cellhits;
 
   if(!evt.getByLabel("calhit", cellhits)){
-    fprintf(stderr, "NOE needs CellHits with label \"calhit\".\n");
-    _exit(0);
+    fprintf(stderr, "NOE needs CellHits with label \"calhit\", but "
+            "event %d doesn't have those.\n", evt.event());
+    return;
   }
 
   art::Handle< vector<rb::Track> > tracks;
