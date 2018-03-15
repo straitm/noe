@@ -78,7 +78,7 @@ void noe::respondToOpenInputFile(art::FileBlock const &fb)
 
 void noe::endJob()
 {
-  realmain(true);
+  if(!theevents.empty()) realmain(true);
 }
 
 // Inject a test event with all FD cells hit
