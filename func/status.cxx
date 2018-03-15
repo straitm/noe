@@ -24,7 +24,7 @@ static const int MAXSTATUS = 1024;
 // than the hyphens that printf puts out.  I'm sure there's a better
 // way to do this.
 #define BOTANY_BAY_OH_NO(x) x < 0?"−":"", fabs(x)
-#define BOTANY_BAY_OH_INT(x) x < 0?"−":"", abs(x)
+#define BOTANY_BAY_OH_INT(x) x < 0?"−":"", abs((int)x)
 
 void set_status(const int boxn, const char * format, ...)
 {
@@ -58,7 +58,7 @@ void set_eventn_status_timing()
 
   char status1[MAXSTATUS];
 
-  int pos = snprintf(status1, MAXSTATUS, "Ticks %s%'d through %'d.  ",
+  int pos = snprintf(status1, MAXSTATUS, "Ticks %s%d through %d.  ",
              BOTANY_BAY_OH_INT(E.mintick), E.maxtick);
   if(E.current_mintick != E.current_maxtick)
     pos += snprintf(status1+pos, MAXSTATUS-pos,

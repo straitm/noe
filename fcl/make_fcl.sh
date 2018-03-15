@@ -21,7 +21,7 @@ doit()
     echo '  Detector: @local::standard_detector'
   fi
   echo '  # Suppress "Begin processing the nth record" messages'
-  echo '  message: { destinations: { debugmsg:{ threshold: "WARNING"} } }'
+  echo '  message: { destinations: { debugmsg:{ type: "cout" threshold: "WARNING"} } }'
   printf '}\n\n'
 
   if [ "$type" != default ]; then

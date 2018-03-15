@@ -46,7 +46,10 @@ standard slicer.
 
 #include <gtk/gtk.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <errno.h>
 #include <vector>
+#include <math.h>
 #include <algorithm>
 #include <string.h>
 #include "drawing.h"

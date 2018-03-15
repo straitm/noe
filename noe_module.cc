@@ -5,6 +5,7 @@
 // For getting the event count when the file is opened
 #include "TTree.h"
 #include "art/Framework/Core/FileBlock.h"
+#include "art/Framework/IO/Root/RootFileBlock.h"
 
 #include "art/Framework/Core/EDProducer.h"
 #include "art/Framework/Core/ModuleMacros.h"
@@ -70,7 +71,9 @@ void noe::respondToOpenInputFile(art::FileBlock const &fb)
   // was for other modules in the path (see CAFMaker for an example
   // of trying to dig out genie settings) so maybe you can get at the
   // InputSource config (which is where that value goes)". So TODO.
-  theevents.reserve(theevents.capacity() + fb.tree()->GetEntries());
+  auto const* rfb = dynamic_cast<art::RootFileBlock const*>(&fb);
+
+  theevents.reserve(theevents.capacity() + rfb->tree()->GetEntries());
 }
 
 void noe::endJob()
@@ -360,6 +363,6 @@ void noe::produce(art::Event& evt)
   realmain(false);
 }
 
-DEFINE_ART_MODULE(noe);
+DEFINE_ART_MODULE(noe)
 
 }
