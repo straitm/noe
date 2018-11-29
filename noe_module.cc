@@ -271,8 +271,8 @@ void noe::produce(art::Event& evt)
   art::Handle< vector<rb::CellHit> > cellhits;
 
   if(!evt.getByLabel(fCellHitLabel, cellhits)){
-    fprintf(stderr, "NOE needs CellHits with label \"%s\", but "
-            "event %d doesn't have those.\n", fCellHitLabel.c_str(), evt.event());
+    fprintf(stderr, "NOE needs CellHits with label \"%s\" as configured in your "
+      "FCL, but event %d doesn't have those.\n", fCellHitLabel.c_str(), evt.event());
     return;
   }
 
