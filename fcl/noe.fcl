@@ -4,6 +4,11 @@ standard_noe:
 {
   module_type:      noe
 
+  # Cell Hits are required. This string must match the module label
+  # of a rb::CellHit product in the event record, or the event display
+  # will not start.
+  cellhit_label: "calhit"
+
   # By default, display BreakPointFitter tracks. The user can change
   # this to another reconstruction, or can disable track display it by
   # specifying "" (the empty string).

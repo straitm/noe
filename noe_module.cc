@@ -37,12 +37,14 @@ class noe : public art::EDProducer {
 
   // The art labels for tracks and vertices that we are going to display, or
   // the empty string to display none.
+  std::string fCellHitLabel;
   std::string fTrackLabel;
   std::string fVertexLabel;
 };
 
 noe::noe(fhicl::ParameterSet const & pset)
 {
+  fCellHitLabel = pset.get< std::string >("cellhit_label");
   fTrackLabel = pset.get< std::string >("track_label");
   fVertexLabel= pset.get< std::string >("vertex_label");
 }
@@ -268,9 +270,9 @@ void noe::produce(art::Event& evt)
 
   art::Handle< vector<rb::CellHit> > cellhits;
 
-  if(!evt.getByLabel("calhit", cellhits)){
-    fprintf(stderr, "NOE needs CellHits with label \"calhit\", but "
-            "event %d doesn't have those.\n", evt.event());
+  if(!evt.getByLabel(fCellHitLabel, cellhits)){
+    fprintf(stderr, "NOE needs CellHits with label \"%s\" as configured in your "
+      "FCL, but event %d doesn't have those.\n", fCellHitLabel.c_str(), evt.event());
     return;
   }
 
